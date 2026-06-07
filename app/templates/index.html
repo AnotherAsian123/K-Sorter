@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+<script>window.KS_NAMING = {language: "{{ naming[0] }}", template: "{{ naming[1] }}"};</script>
+
+
+<div class="card">
+  <h2>Database</h2>
+  <div class="stats">
+    <div class="stat"><div class="n">{{ counts.groups }}</div><div class="l">Groups</div></div>
+    <div class="stat"><div class="n">{{ counts.members }}</div><div class="l">Members</div></div>
+    <div class="stat"><div class="n">{{ counts.aliases }}</div><div class="l">Aliases</div></div>
+    <div class="stat"><div class="n">{{ counts.corrections }}</div><div class="l">Learned</div></div>
+  </div>
+  <p class="muted" style="margin-top:12px">
+    Seeded from the open kpopnet dataset (Korean names, nicknames &amp; former members included).
+    Refreshes on restart or on demand.
+  </p>
+  <button class="btn teal small" onclick="updateDb(this)">&#8635; Update Database</button>
+  <span id="db-msg" class="muted"></span>
+</div>
+
+<div class="card" x-data="setup()">
+  <h2>What shall we sort?</h2>
+  <div class="row">
+    <div>
+      <label>Source folder (the messy one)</label>
+      <input type="text" name="source" x-model="source" placeholder="/mnt/user/Media/unsorted">
+      <div hx-post="/validate-path" hx-trigger="change from:previous input, keyup changed delay:600ms from:previous input"
+           hx-include="previous input" hx-vals='{"need_write":"false"}' hx-target="this" hx-swap="innerHTML"></div>
+    </div>
+    <div>
+      <label>Destination folder (sort into here)</label>
+      <input type="text" name="dest" x-model="dest" placeholder="/mnt/user/Media/K-Pop">
+      <div hx-post="/validate-path" hx-trigger="change from:previous input, keyup changed delay:600ms from:previous input"
+           hx-include="previous input" hx-vals='{"need_write":"true"}' hx-target="this" hx-swap="innerHTML"></div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:6px">
+    <div>
+      <label>Folder names</label>
+      <select x-model="language" @change="saveSettings()">
+        <option value="en">English (e.g. TWICE)</option>
+        <option value="ko">Korean (e.g. &#53944;&#50752;&#51060;&#49828;)</option>
+      </select>
+    </div>
+    <div>
+      <label>Member folder template</label>
+      <select x-model="template" @change="saveSettings()">
+        <option value="nested">Group / Member  (default)</option>
+        <option value="flat">Group - Member</option>
+        <option value="{group}/{member}">Custom: {group}/{member}</option>
+      </select>
+    </div>
+    <div>
+      <label>Mode</label>
+      <select x-model="mode">
+        <option value="apply">Auto-sort confident matches</option>
+        <option value="dryrun">Dry run (preview &amp; export CSV only)</option>
+      </select>
+    </div>
+  </div>
+
+  <form hx-post="/sort" hx-target="#status" hx-swap="innerHTML" style="margin-top:18px">
+    <input type="hidden" name="source" :value="source">
+    <input type="hidden" name="dest" :value="dest">
+    <input type="hidden" name="mode" :value="mode">
+    <button class="btn" type="submit">&#9654; Start sorting</button>
+    <span class="muted">&nbsp;Confident matches move automatically; only the unsure ones ask for you.</span>
+  </form>
+</div>
+
+<div id="status" hx-get="/status" hx-trigger="load"></div>
+
+{% if batches %}
+<div class="card">
+  <h2>Move history &amp; undo</h2>
+  <p class="muted">Every batch is journaled. Changed your mind? Put it back.</p>
+  {% for b in batches %}
+  <div class="item" style="display:flex;align-items:center;gap:12px">
+    <div style="flex:1">
+      <span class="fname">Batch {{ b.batch_id[:8] }}</span>
+      <div class="meta">{{ b.at }} &middot; {{ b.n }} moves{% if b.undone %} &middot; {{ b.undone }} undone{% endif %}</div>
+    </div>
+    <button class="btn clay small" onclick="undoBatch('{{ b.batch_id }}', this)">&#8634; Undo</button>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

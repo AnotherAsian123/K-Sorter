@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>K-Sorter</title>
+  <link rel="icon" type="image/png" href="/static/img/favicon.png">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="/static/js/htmx.min.js" defer></script>
+  <script src="/static/js/alpine.min.js" defer></script>
+  <script src="/static/js/app.js" defer></script>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">
+        <h1>K&#8209;Sorter <span class="beat">&#9834;</span></h1>
+        <p class="tagline">sort once, sort TWICE</p>
+      </div>
+      <div class="spacer"></div>
+      <button class="toggle" onclick="toggleTheme()">&#9789; theme</button>
+    </header>
+    {% block content %}{% endblock %}
+    <p class="muted" style="text-align:center;margin-top:30px">
+      Calm sorting for your fancams. Nothing moves into the wrong place &mdash; and anything moved can be undone.
+    </p>
+  </div>
+</body>
+</html>

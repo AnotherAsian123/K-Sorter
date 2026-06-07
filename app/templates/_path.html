@@ -1,0 +1,5 @@
+{% if r.ok %}
+<span class="path-ok">&#10003; {{ r.reason }}</span>
+{% else %}
+<span class="path-err">&#10007; {{ r.reason }}</span>
+{% endif %}

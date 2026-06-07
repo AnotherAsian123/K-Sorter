@@ -1,0 +1,90 @@
+"""End-to-end engine tests: real temp files moved into real folders, then undone.
+Offline — uses a tiny hand-seeded DB (no network)."""
+import os
+import tempfile
+from pathlib import Path
+
+_TMP = tempfile.mkdtemp(prefix="ksorter-eng-")
+os.environ["KSORTER_CONFIG_DIR"] = _TMP
+
+from app import database as db          # noqa: E402
+from app import engine, matcher         # noqa: E402
+from app.normalize import normalize     # noqa: E402
+from app.scanner import VideoFile       # noqa: E402
+
+
+def _alias(t, i, raw):
+    db.execute("INSERT OR IGNORE INTO aliases(entity_type,entity_id,alias,alias_raw)"
+               " VALUES(?,?,?,?)", (t, i, normalize(raw), raw))
+
+
+def setup_module(_m):
+    db.get_conn()
+    for gid, name, ko in [("twice", "TWICE", "트와이스"), ("itzy", "ITZY", "있지")]:
+        db.execute("INSERT OR REPLACE INTO groups(id,name,name_ko,is_active) VALUES(?,?,?,1)",
+                   (gid, name, ko))
+        _alias("group", gid, name); _alias("group", gid, ko)
+    for mid, en, ko, gid in [("nayeon", "Nayeon", "나연", "twice"),
+                             ("momo", "Momo", "모모", "twice"),
+                             ("yeji", "Yeji", "예지", "itzy")]:
+        db.execute("INSERT OR REPLACE INTO members(id,stage_name,stage_name_ko) VALUES(?,?,?)",
+                   (mid, en, ko))
+        db.execute("INSERT OR REPLACE INTO group_members(group_id,member_id,is_current)"
+                   " VALUES(?,?,1)", (gid, mid))
+        _alias("member", mid, en); _alias("member", mid, ko)
+    matcher.reload_index()
+
+
+def _make(src: Path, name: str):
+    f = src / name
+    f.write_bytes(b"x" * 2048)
+    return f
+
+
+def test_full_sort_and_undo(tmp_path):
+    src = tmp_path / "src"; dst = tmp_path / "dst"
+    src.mkdir(); dst.mkdir()
+    solo = _make(src, "230101 TWICE Nayeon fancam 4K.mp4")
+    group_video = _make(src, "TWICE The Feels MV.mp4")
+
+    batch = "test-batch"
+    for f in (solo, group_video):
+        vf = VideoFile(path=f, size=f.stat().st_size, stem=f.stem)
+        item = engine.build_plan_item(vf, dst)
+        assert item.status == "auto", f"{f.name} -> {item.status} ({item.reason})"
+        res = engine.apply_item(item, batch)
+        assert res["status"] == "moved", res
+
+    assert (dst / "TWICE" / "Nayeon" / "230101 TWICE Nayeon fancam 4K.mp4").exists()
+    assert (dst / "TWICE" / "Group" / "TWICE The Feels MV.mp4").exists()
+    assert not solo.exists() and not group_video.exists()  # sources moved
+
+    # Undo restores originals.
+    out = engine.undo_batch(batch)
+    assert out["restored"] == 2 and out["failed"] == 0
+    assert solo.exists() and group_video.exists()
+
+
+def test_collab_replicates(tmp_path):
+    src = tmp_path / "s2"; dst = tmp_path / "d2"
+    src.mkdir(); dst.mkdir()
+    f = _make(src, "TWICE x ITZY special stage.mp4")
+    vf = VideoFile(path=f, size=f.stat().st_size, stem=f.stem)
+    item = engine.build_plan_item(vf, dst)
+    assert item.is_collab and item.status == "auto"
+    res = engine.apply_item(item, "collab-batch")
+    assert res["status"] == "moved"
+    assert (dst / "_Special Stages" / f.name).exists()
+    # Replicated into both groups' Group/ folders.
+    assert (dst / "TWICE" / "Group" / f.name).exists()
+    assert (dst / "ITZY" / "Group" / f.name).exists()
+
+
+def test_unknown_goes_manual(tmp_path):
+    src = tmp_path / "s3"; dst = tmp_path / "d3"
+    src.mkdir(); dst.mkdir()
+    f = _make(src, "family_picnic_clip.mp4")
+    vf = VideoFile(path=f, size=f.stat().st_size, stem=f.stem)
+    item = engine.build_plan_item(vf, dst)
+    assert item.status == "manual"
+    assert item.primary_dest is None

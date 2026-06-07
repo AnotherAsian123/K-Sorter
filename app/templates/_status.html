@@ -1,0 +1,114 @@
+{# Re-poll only while the job is running, so review forms stay stable when done. #}
+{% if running %}
+<div hx-get="/status" hx-trigger="every 2s" hx-target="#status" hx-swap="innerHTML"></div>
+{% endif %}
+
+{% if error %}<div class="banner err">{{ error }} &mdash; see the log file for full details.</div>{% endif %}
+
+{% if state.status != 'idle' %}
+<div class="card">
+  <h2>
+    {% if running %}Sorting in progress&hellip;{% else %}Results{% endif %}
+    {% if state.status == 'done' %}<span class="chip auto">done</span>{% endif %}
+    {% if state.status == 'error' %}<span class="chip manual">error</span>{% endif %}
+  </h2>
+
+  {% if running %}<div class="progress"><span style="width:100%"></span></div>{% endif %}
+  <p class="muted">{{ state.message }}</p>
+
+  <div class="stats">
+    <div class="stat"><div class="n">{{ state.processed }}</div><div class="l">Scanned</div></div>
+    <div class="stat"><div class="n">{{ state.moved }}</div><div class="l">Sorted</div></div>
+    <div class="stat"><div class="n">{{ state.review_count }}</div><div class="l">To confirm</div></div>
+    <div class="stat"><div class="n">{{ state.manual_count }}</div><div class="l">Manual</div></div>
+    <div class="stat"><div class="n">{{ state.skipped }}</div><div class="l">Skipped</div></div>
+    <div class="stat"><div class="n">{{ state.duplicate_count }}</div><div class="l">Dupes</div></div>
+  </div>
+  {% if state.export_path %}
+  <p class="muted" style="margin-top:10px">&#128196; Dry-run plan exported to <code>{{ state.export_path }}</code></p>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ---- needs confirmation (precise questions) ---- #}
+{% if state.review %}
+<div class="card">
+  <h2>A quick yes-or-yes? <span class="chip confirm">{{ state.review|length }}</span></h2>
+  <p class="muted">We have a good guess but want to be sure before moving these.</p>
+  {% for it in state.review %}
+  <div class="item">
+    <div class="fname">{{ it.filename }}</div>
+    <div class="meta">{{ it.reason }} &middot; confidence {{ it.confidence }}%
+      {% if it.group_name %}&middot; guess: <strong>{{ it.group_name }}</strong>{% if it.member_name %} / {{ it.member_name }}{% endif %}{% endif %}
+    </div>
+    <form hx-post="/resolve" hx-target="#status" hx-swap="innerHTML" class="controls">
+      <input type="hidden" name="item_id" value="{{ it.id }}">
+      <select name="group_id" onchange="loadMembers(this)">
+        {% if it.group_candidates %}
+          {% for c in it.group_candidates %}<option value="{{ c.id }}">{{ c.name }}{% if c.name_ko %} ({{ c.name_ko }}){% endif %} &middot; {{ c.score }}%</option>{% endfor %}
+        {% elif it.group_id %}
+          <option value="{{ it.group_id }}">{{ it.group_name }}</option>
+        {% endif %}
+      </select>
+      <select name="member_id">
+        <option value="">&mdash; group folder (no member) &mdash;</option>
+        {% for c in it.member_candidates %}<option value="{{ c.id }}">{{ c.name }}{% if c.name_ko %} ({{ c.name_ko }}){% endif %} &middot; {{ c.score }}%</option>{% endfor %}
+      </select>
+      <button class="btn small" type="submit">&#10003; Confirm</button>
+    </form>
+    <form hx-post="/skip" hx-target="#status" hx-swap="innerHTML" style="display:inline">
+      <input type="hidden" name="item_id" value="{{ it.id }}">
+      <button class="btn secondary small" type="submit">Skip</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ---- manual queue (no confident match) ---- #}
+{% if state.manual %}
+<div class="card">
+  <h2>Need a human touch <span class="chip manual">{{ state.manual|length }}</span></h2>
+  <p class="muted">No confident match &mdash; search the database, or look one up online.</p>
+  {% for it in state.manual %}
+  <div class="item" x-data="manualItem('{{ it.id }}')">
+    <div class="fname">{{ it.filename }}</div>
+    <div class="meta">{{ it.reason }}</div>
+    <div class="controls">
+      <input type="text" placeholder="Search group&hellip;" x-model="q" @keyup.debounce.400ms="searchGroups()">
+      <select x-model="groupId" @change="loadMembers()">
+        <option value="">&mdash; pick group &mdash;</option>
+        <template x-for="g in groups" :key="g.id"><option :value="g.id" x-text="g.name + (g.name_ko ? ' ('+g.name_ko+')' : '')"></option></template>
+      </select>
+      <select x-model="memberId">
+        <option value="">&mdash; group folder (no member) &mdash;</option>
+        <template x-for="m in members" :key="m.id"><option :value="m.id" x-text="m.name"></option></template>
+      </select>
+      <button class="btn small" @click="confirm()" :disabled="!groupId">&#10003; Sort</button>
+      <button class="btn teal small" @click="lookup()">&#128270; Look up online</button>
+      <button class="btn secondary small" @click="skip()">Skip</button>
+    </div>
+    <div class="meta" x-show="online.length" style="margin-top:8px">
+      <template x-for="o in online" :key="o.url">
+        <div>&bull; <a :href="o.url" target="_blank" x-text="o.title"></a>
+          <button class="btn small" @click="addOnline(o.title)">Add as new group</button></div>
+      </template>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ---- suspected duplicates (flagged, never deleted) ---- #}
+{% if state.duplicates %}
+<div class="card">
+  <h2>Suspected duplicates <span class="chip clay">{{ state.duplicates|length }}</span></h2>
+  <p class="muted">Flagged by size + partial hash. Nothing deleted &mdash; full list in <code>logs/duplicates.csv</code>.</p>
+  <details>
+    <summary>Show {{ state.duplicates|length }} files</summary>
+    {% for d in state.duplicates %}
+    <div class="dupe">{{ d.path }} <span class="muted">({{ (d.size / 1048576) | round(1) }} MB)</span></div>
+    {% endfor %}
+  </details>
+</div>
+{% endif %}
