@@ -1,0 +1,78 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>K-Sorter</Name>
+  <Repository>ghcr.io/anotherasian123/k-sorter:latest</Repository>
+  <Registry>https://github.com/anotherasian123/k-sorter</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/anotherasian123/k-sorter/issues</Support>
+  <Project>https://github.com/anotherasian123/k-sorter</Project>
+  <Overview>
+    K-Sorter calmly sorts a messy folder of K-pop videos into correctly-named
+    group (and member) folders, from an easy frosted-glass web UI. Sort once,
+    sort TWICE.
+
+    Point it at a source folder and a destination folder, and it reads each
+    filename, matches it to a group — and, for solo fancams/focus videos, to a
+    member — then sorts it. Confident matches move automatically; only the ones
+    it isn't sure about ask you a quick yes-or-yes. Nothing is ever renamed,
+    nothing is overwritten, and every move can be undone.
+
+    Korean names, nicknames and former members are all handled (seeded from the
+    open CC0 kpopnet dataset). Collabs go to a "_Special Stages" folder and are
+    replicated into each group; sub-units get their own folder; suspected
+    duplicates are flagged (never deleted); and a watch-folder can auto-sort new
+    drops.
+
+    ⚠️ SAME FILESYSTEM = INSTANT: keep your Source and Destination under the SAME
+    share (e.g. both under /media). Moves on the same filesystem are atomic
+    renames (instant, no copy). Moving across filesystems (or between different
+    shares / network mounts) safely copies → verifies → deletes, which is slower
+    but never loses or corrupts a file.
+
+    - Recursive scan, including nested subfolders
+    - Confident auto-sort; precise prompts only when unsure
+    - Undo any batch from the move history
+    - Learns from your corrections so it gets smarter over time
+    - Safe-mode streaming jobs keep huge libraries responsive
+  </Overview>
+  <Category>MediaApp:Video Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/anotherasian123/k-sorter/main/app/static/img/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Description>
+    K-Sorter — a calm, accurate K-pop video sorter. Point it at a messy folder
+    and a destination; it sorts each video into the right group (and member)
+    folder, only asking when it isn't sure. Every move is undoable.
+  </Description>
+
+  <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp" Description="Port for the web interface." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+
+  <Config Name="Media" Target="/media" Default="/mnt/user/Media" Mode="rw" Description="Your media share. Put BOTH the source (messy) folder and the destination folder under here — e.g. /media/unsorted and /media/K-Pop — so moves stay on the same filesystem and are instant. You can also map network shares here (mount them on the Unraid host first, then point this at the host path)." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/Media</Config>
+
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/k-sorter" Mode="rw" Description="Persistent storage for the group database, logs, CSV exports and the undo journal." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/k-sorter</Config>
+
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID for created files/folders. Unraid default is 99 (nobody)." Type="Variable" Display="advanced" Required="true" Mask="false">99</Config>
+
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID for created files/folders. Unraid default is 100 (users)." Type="Variable" Display="advanced" Required="true" Mask="false">100</Config>
+
+  <Config Name="UMASK" Target="UMASK" Default="022" Mode="" Description="File-creation mask for new folders/files (022 = drwxr-xr-x / -rw-r--r--)." Type="Variable" Display="advanced" Required="false" Mask="false">022</Config>
+
+  <Config Name="Watch Folder" Target="KSORTER_WATCH_DIR" Default="" Mode="" Description="Optional. A folder to watch for new videos — anything dropped here is auto-sorted (confident matches only; uncertain ones are left in place). e.g. /media/_watch. Leave empty to disable watch-folder mode." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <Config Name="Watch Destination" Target="KSORTER_WATCH_DEST" Default="" Mode="" Description="Optional. Where watch-folder videos are sorted into. e.g. /media/K-Pop. Required only if Watch Folder is set." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <Config Name="Auto-sort Threshold" Target="KSORTER_AUTO_THRESHOLD" Default="90" Mode="" Description="Match score (0-100) at or above which a video is sorted automatically. Higher = more cautious (more goes to the confirm queue)." Type="Variable" Display="advanced" Required="false" Mask="false">90</Config>
+
+  <Config Name="Confirm Threshold" Target="KSORTER_CONFIRM_THRESHOLD" Default="70" Mode="" Description="Match score (0-100) at or above which a video is queued for your confirmation; below this it goes to the manual queue. Must be lower than the auto-sort threshold." Type="Variable" Display="advanced" Required="false" Mask="false">70</Config>
+
+  <Config Name="Verify Checksum" Target="KSORTER_VERIFY_CHECKSUM" Default="false" Mode="" Description="Extra paranoia for cross-filesystem moves: SHA-256 verify each file after copying (in addition to the always-on size check). Slower on large videos — leave 'false' unless you really want it." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+</Container>

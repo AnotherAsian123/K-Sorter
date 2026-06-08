@@ -56,7 +56,7 @@ no cloud, no hosting fees. Live lookups for unknown groups use the free Wikipedi
 
 ## Run on Unraid
 
-1. Add the template (`k-sorter.xml`) via Community Applications, or pull
+1. Add the template (`unraid-template.xml`) via Community Applications, or pull
    `ghcr.io/anotherasian123/k-sorter:latest`.
 2. Map:
    - `/config` → `/mnt/user/appdata/k-sorter`
