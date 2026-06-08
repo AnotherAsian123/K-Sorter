@@ -56,7 +56,9 @@
 
   <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp" Description="Port for the web interface." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
 
-  <Config Name="Media" Target="/media" Default="/mnt/user/Media" Mode="rw" Description="Your media share. Put BOTH the source (messy) folder and the destination folder under here — e.g. /media/unsorted and /media/K-Pop — so moves stay on the same filesystem and are instant. You can also map network shares here (mount them on the Unraid host first, then point this at the host path)." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/Media</Config>
+  <Config Name="Source Folder" Target="/source" Default="/mnt/user/Media/unsorted" Mode="rw" Description="The messy folder to sort. The app scans this; inside the app just enter /source. TIP: keep this on the SAME share as the Destination so moves are instant atomic renames. Network shares work too — mount them on the Unraid host first, then browse to the host path here." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/Media/unsorted</Config>
+
+  <Config Name="Destination Folder" Target="/destination" Default="/mnt/user/Media/K-Pop" Mode="rw" Description="Where the sorted group/member folders are created. Inside the app, enter /destination. Keep it on the same share as Source for instant moves; a different disk/share is still safe (copy → verify → delete) but slower." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/Media/K-Pop</Config>
 
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/k-sorter" Mode="rw" Description="Persistent storage for the group database, logs, CSV exports and the undo journal." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/k-sorter</Config>
 
@@ -66,9 +68,9 @@
 
   <Config Name="UMASK" Target="UMASK" Default="022" Mode="" Description="File-creation mask for new folders/files (022 = drwxr-xr-x / -rw-r--r--)." Type="Variable" Display="advanced" Required="false" Mask="false">022</Config>
 
-  <Config Name="Watch Folder" Target="KSORTER_WATCH_DIR" Default="" Mode="" Description="Optional. A folder to watch for new videos — anything dropped here is auto-sorted (confident matches only; uncertain ones are left in place). e.g. /media/_watch. Leave empty to disable watch-folder mode." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Watch Folder" Target="/watch" Default="" Mode="rw" Description="Optional. Map a folder here to enable watch mode — new videos dropped in are auto-sorted (confident matches only; uncertain ones are left in place). Adding this shows a folder-browse dropdown. Leave unmapped to disable watch mode." Type="Path" Display="advanced" Required="false" Mask="false"></Config>
 
-  <Config Name="Watch Destination" Target="KSORTER_WATCH_DEST" Default="" Mode="" Description="Optional. Where watch-folder videos are sorted into. e.g. /media/K-Pop. Required only if Watch Folder is set." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Watch Destination" Target="/watch_dest" Default="" Mode="rw" Description="Optional. Where watch-folder videos are sorted into. Required only if Watch Folder is mapped." Type="Path" Display="advanced" Required="false" Mask="false"></Config>
 
   <Config Name="Auto-sort Threshold" Target="KSORTER_AUTO_THRESHOLD" Default="90" Mode="" Description="Match score (0-100) at or above which a video is sorted automatically. Higher = more cautious (more goes to the confirm queue)." Type="Variable" Display="advanced" Required="false" Mask="false">90</Config>
 

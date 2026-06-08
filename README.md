@@ -60,10 +60,13 @@ no cloud, no hosting fees. Live lookups for unknown groups use the free Wikipedi
    `ghcr.io/anotherasian123/k-sorter:latest`.
 2. Map:
    - `/config` → `/mnt/user/appdata/k-sorter`
-   - `/media` → your media share (keep source **and** destination under here so
-     moves stay on the same filesystem and are instant)
+   - `/source` → the folder to sort (e.g. `/mnt/user/Media/unsorted`)
+   - `/destination` → where sorted folders go (e.g. `/mnt/user/Media/K-Pop`)
+   - *(optional)* `/watch` + `/watch_dest` to enable watch-folder mode
+   Keep Source and Destination on the **same share** so moves are instant atomic renames.
 3. Set `PUID=99`, `PGID=100`, `UMASK=022` (defaults).
-4. Open the WebUI, point it at e.g. `/media/unsorted` → `/media/K-Pop`, and sort.
+4. Open the WebUI — Source and Destination are prefilled with `/source` and
+   `/destination` (from the mounts), so just click **Start**.
 
 ### Network shares
 Mount the SMB/NFS share on the Unraid host and bind-mount it into the container

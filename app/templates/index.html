@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
-<script>window.KS_NAMING = {language: "{{ naming[0] }}", template: "{{ naming[1] }}"};</script>
+<script>
+window.KS_NAMING = {language: "{{ naming[0] }}", template: "{{ naming[1] }}"};
+window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ settings.dest_default }}"};
+</script>
 
 
 <div class="card">

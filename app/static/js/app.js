@@ -69,9 +69,10 @@ async function loadMembers(sel) {
 
 document.addEventListener("alpine:init", () => {
   const n = window.KS_NAMING || { language: "en", template: "nested" };
+  const d = window.KS_DEFAULTS || { source: "", dest: "" };
 
   Alpine.data("setup", () => ({
-    source: "", dest: "", mode: "apply",
+    source: d.source, dest: d.dest, mode: "apply",
     language: n.language, template: n.template,
     saveSettings() {
       postForm("/settings", { language: this.language, template: this.template });

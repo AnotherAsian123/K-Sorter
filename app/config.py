@@ -23,6 +23,19 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _path_or_mount(name: str, mount: str) -> str:
+    """An explicit env path wins; otherwise use the container mount if present.
+
+    This lets the Unraid template expose Source/Destination/Watch folders as
+    *Path* mappings (with a folder-browse dropdown) rather than text env vars:
+    when the user maps a folder, the mount exists and we pick it up.
+    """
+    val = os.getenv(name)
+    if val:
+        return val
+    return mount if Path(mount).is_dir() else ""
+
+
 @dataclass(frozen=True)
 class Settings:
     # Where the SQLite DB, logs and exports live.
@@ -31,9 +44,15 @@ class Settings:
     # WebUI port (informational; uvicorn is launched with it in the entrypoint).
     port: int = field(default_factory=lambda: int(_env("KSORTER_PORT", "8080")))
 
-    # Optional watch-folder mode (plan.md §10). Empty = disabled.
-    watch_dir: str = field(default_factory=lambda: _env("KSORTER_WATCH_DIR", ""))
-    watch_dest: str = field(default_factory=lambda: _env("KSORTER_WATCH_DEST", ""))
+    # Source / destination folder mounts (Unraid Path mappings). Used to prefill
+    # the web UI so you don't have to retype the container paths.
+    source_default: str = field(default_factory=lambda: _path_or_mount("KSORTER_SOURCE", "/source"))
+    dest_default: str = field(default_factory=lambda: _path_or_mount("KSORTER_DEST", "/destination"))
+
+    # Optional watch-folder mode (plan.md §10). Enabled when both are present;
+    # mapped as Path folders (/watch, /watch_dest) or set via env. Empty = off.
+    watch_dir: str = field(default_factory=lambda: _path_or_mount("KSORTER_WATCH_DIR", "/watch"))
+    watch_dest: str = field(default_factory=lambda: _path_or_mount("KSORTER_WATCH_DEST", "/watch_dest"))
 
     # Seed dataset source (free, CC0). Refreshed only on restart / manual update.
     seed_url: str = field(
