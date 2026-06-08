@@ -27,6 +27,8 @@ class JobState:
         self.dest = ""
         self.batch_id = ""
         self.apply = True
+        self.phase = ""               # human label for the current phase
+        self.total = 0                # videos discovered (denominator for the bar)
         self.processed = 0
         self.moved = 0
         self.skipped = 0
@@ -36,12 +38,20 @@ class JobState:
         self.duplicates: list[dict] = []
         self.export_path = ""
 
+    @property
+    def percent(self) -> int:
+        if self.status in ("done", "error"):
+            return 100
+        if self.total <= 0:
+            return 0
+        return min(99, int(self.processed * 100 / self.total))
+
     def snapshot(self) -> dict:
         return {
             "id": self.id, "status": self.status, "message": self.message,
-            "source": self.source, "dest": self.dest,
-            "processed": self.processed, "moved": self.moved,
-            "skipped": self.skipped, "errors": self.errors,
+            "phase": self.phase, "source": self.source, "dest": self.dest,
+            "total": self.total, "processed": self.processed, "percent": self.percent,
+            "moved": self.moved, "skipped": self.skipped, "errors": self.errors,
             "review_count": len(self.review), "manual_count": len(self.manual),
             "duplicate_count": len(self.duplicates),
             "review": self.review, "manual": self.manual,
@@ -77,9 +87,29 @@ class JobManager:
     def _run(self, st: JobState) -> None:
         try:
             dest_root = Path(st.dest)
-            all_items = []
-            st.status = "sorting"
+
+            # Phase 1 — scan. Stream the source so the count climbs live, giving
+            # immediate feedback even on a slow network share.
+            st.status = "scanning"
+            st.phase = "Scanning"
+            files = []
             for vf in scan(st.source):
+                files.append(vf)
+                st.total = len(files)
+                if st.total % 50 == 0:
+                    st.message = f"Scanning… found {st.total} videos so far"
+            st.message = f"Found {st.total} videos."
+            if st.total == 0:
+                st.status = "done"
+                st.phase = "Done"
+                st.message = "No videos found in the source folder."
+                return
+
+            # Phase 2 — sort, with a determinate progress bar.
+            st.status = "sorting"
+            st.phase = "Sorting" if st.apply else "Previewing (dry run)"
+            all_items = []
+            for vf in files:
                 item = engine.build_plan_item(vf, dest_root)
                 all_items.append(item)
                 if st.apply and item.status == "auto":
@@ -96,15 +126,18 @@ class JobManager:
                 else:  # manual
                     st.manual.append(item.as_dict())
                 st.processed += 1
-                if st.processed % 25 == 0:
-                    st.message = f"Processed {st.processed} files…"
+                if st.processed % 10 == 0 or st.processed == st.total:
+                    st.message = f"Sorting {st.processed} of {st.total}…"
 
-            # Duplicate detection over the source set (flag only, never delete).
+            # Phase 3 — duplicate detection (flag only, never delete).
+            st.phase = "Checking duplicates"
+            st.message = "Checking for duplicates…"
             st.duplicates = duplicates.detect(st.source)
             if not st.apply:
                 st.export_path = str(engine.export_plan_csv(all_items))
 
             st.status = "done"
+            st.phase = "Done"
             st.message = (f"Done. {st.moved} sorted, {len(st.review)} to confirm, "
                           f"{len(st.manual)} manual, {st.skipped} skipped.")
             log.info("Sort %s complete: %s", st.id, st.snapshot()

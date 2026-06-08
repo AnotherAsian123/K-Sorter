@@ -1,23 +1,34 @@
 {# Re-poll only while the job is running, so review forms stay stable when done. #}
 {% if running %}
-<div hx-get="/status" hx-trigger="every 2s" hx-target="#status" hx-swap="innerHTML"></div>
+<div hx-get="/status" hx-trigger="every 1s" hx-target="#status" hx-swap="innerHTML"></div>
 {% endif %}
 
 {% if error %}<div class="banner err">{{ error }} &mdash; see the log file for full details.</div>{% endif %}
 
 {% if state.status != 'idle' %}
-<div class="card">
-  <h2>
-    {% if running %}Sorting in progress&hellip;{% else %}Results{% endif %}
-    {% if state.status == 'done' %}<span class="chip auto">done</span>{% endif %}
-    {% if state.status == 'error' %}<span class="chip manual">error</span>{% endif %}
+<div class="card job">
+  <h2 class="job-head">
+    {% if running %}<span class="spinner" aria-hidden="true"></span>{% else %}<span class="done-dot {{ 'err' if state.status == 'error' else 'ok' }}" aria-hidden="true">{{ '!' if state.status == 'error' else '✓' }}</span>{% endif %}
+    Job
+    {% if running %}<span class="chip confirm">{{ state.phase or 'working' }}</span>
+    {% elif state.status == 'done' %}<span class="chip auto">done</span>
+    {% elif state.status == 'error' %}<span class="chip manual">error</span>{% endif %}
+    <span class="spacer"></span>
+    <span class="job-pct">{{ state.percent }}%</span>
   </h2>
 
-  {% if running %}<div class="progress"><span style="width:100%"></span></div>{% endif %}
-  <p class="muted">{{ state.message }}</p>
+  {# Determinate bar once we know the total; gentle indeterminate while scanning. #}
+  <div class="progress {{ 'indeterminate' if running and state.total == 0 else '' }}">
+    <span style="width: {{ state.percent }}%"></span>
+  </div>
+
+  <p class="muted job-msg">
+    {% if running %}<strong>{{ state.phase }}:</strong> {% endif %}{{ state.message }}
+    {% if running and state.total > 0 %}&nbsp;({{ state.processed }}/{{ state.total }}){% endif %}
+  </p>
 
   <div class="stats">
-    <div class="stat"><div class="n">{{ state.processed }}</div><div class="l">Scanned</div></div>
+    <div class="stat"><div class="n">{{ state.total }}</div><div class="l">Found</div></div>
     <div class="stat"><div class="n">{{ state.moved }}</div><div class="l">Sorted</div></div>
     <div class="stat"><div class="n">{{ state.review_count }}</div><div class="l">To confirm</div></div>
     <div class="stat"><div class="n">{{ state.manual_count }}</div><div class="l">Manual</div></div>
@@ -27,8 +38,11 @@
   {% if state.export_path %}
   <p class="muted" style="margin-top:10px">&#128196; Dry-run plan exported to <code>{{ state.export_path }}</code></p>
   {% endif %}
+  {% if running %}<p class="muted" style="margin-top:6px">You can leave this page open &mdash; it updates live.</p>{% endif %}
 </div>
 {% endif %}
+
+{% if not running %}
 
 {# ---- needs confirmation (precise questions) ---- #}
 {% if state.review %}
@@ -112,3 +126,5 @@
   </details>
 </div>
 {% endif %}
+
+{% endif %}{# /not running #}

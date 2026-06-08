@@ -103,10 +103,27 @@ input:focus, select:focus { outline: none; border-color: var(--sage);
 .stat .n { font-size: 1.8rem; font-weight: 700; color: var(--sage); }
 .stat .l { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
 
-.progress { height: 10px; border-radius: 999px; background: rgba(65,69,53,.12); overflow: hidden; margin: 14px 0; }
+.progress { height: 12px; border-radius: 999px; background: rgba(65,69,53,.12); overflow: hidden; margin: 14px 0; }
 .progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--teal), var(--sage));
-  background-size: 200% 100%; animation: flow 2s linear infinite; transition: width .4s ease; }
+  background-size: 200% 100%; animation: flow 2s linear infinite; transition: width .5s ease; }
 @keyframes flow { from { background-position: 0 0; } to { background-position: 200% 0; } }
+/* Indeterminate (while scanning, total unknown): a calm sweeping band. */
+.progress.indeterminate > span { width: 35% !important; border-radius: 999px;
+  animation: flow 2s linear infinite, sweep 1.6s ease-in-out infinite; }
+@keyframes sweep { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+
+/* Job panel header */
+.job-head { display: flex; align-items: center; gap: 10px; }
+.job-pct { font-size: 1.05rem; font-weight: 700; color: var(--sage); }
+.job-msg { margin-top: 4px; min-height: 1.2em; }
+.spinner { width: 18px; height: 18px; border-radius: 50%;
+  border: 3px solid rgba(97,137,133,.25); border-top-color: var(--sage);
+  display: inline-block; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.done-dot { width: 20px; height: 20px; border-radius: 50%; display: inline-flex;
+  align-items: center; justify-content: center; font-size: .8rem; font-weight: 800; color: #fff; }
+.done-dot.ok { background: var(--sage); }
+.done-dot.err { background: #a4552e; }
 
 .item { border: 1px solid var(--panel-border); border-radius: 14px; padding: 14px;
   margin-bottom: 12px; background: rgba(255,255,255,.35); animation: settle .4s ease both; }

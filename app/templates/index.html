@@ -64,7 +64,9 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
     </div>
   </div>
 
-  <form hx-post="/sort" hx-target="#status" hx-swap="innerHTML" style="margin-top:18px">
+  <form hx-post="/sort" hx-target="#status" hx-swap="innerHTML" hx-disabled-elt="find button"
+        style="margin-top:18px"
+        onsubmit="setTimeout(function(){var s=document.getElementById('status');if(s)s.scrollIntoView({behavior:'smooth',block:'start'});},150)">
     <input type="hidden" name="source" :value="source">
     <input type="hidden" name="dest" :value="dest">
     <input type="hidden" name="mode" :value="mode">
