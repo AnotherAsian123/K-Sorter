@@ -86,15 +86,21 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
 {% if batches %}
 <div class="card">
   <h2>Move history &amp; undo</h2>
-  <p class="muted">Every batch is journaled. Changed your mind? Put it back.</p>
+  <p class="muted">Every batch is journaled. Expand to see exactly what moved where; undo puts it back.</p>
   {% for b in batches %}
-  <div class="item" style="display:flex;align-items:center;gap:12px">
-    <div style="flex:1">
-      <span class="fname">Batch {{ b.batch_id[:8] }}</span>
-      <div class="meta">{{ b.at }} &middot; {{ b.n }} moves{% if b.undone %} &middot; {{ b.undone }} undone{% endif %}</div>
+  <details class="batch">
+    <summary class="batch-sum">
+      <span class="disc" aria-hidden="true">&#9656;</span>
+      <span class="bchip">{{ b.n }} move{{ '' if b.n == 1 else 's' }}</span>
+      <span class="muted">{{ b.at }}</span>
+      {% if b.undone %}<span class="muted">&middot; {{ b.undone }} undone</span>{% endif %}
+      <button class="btn clay small" onclick="event.preventDefault();event.stopPropagation();undoBatch('{{ b.batch_id }}', this)">&#8634; Undo</button>
+    </summary>
+    <div class="batch-body" hx-get="/batch/{{ b.batch_id }}/moves"
+         hx-trigger="toggle once from:closest details" hx-swap="innerHTML">
+      <p class="muted">Loading moves&hellip;</p>
     </div>
-    <button class="btn clay small" onclick="undoBatch('{{ b.batch_id }}', this)">&#8634; Undo</button>
-  </div>
+  </details>
   {% endfor %}
 </div>
 {% endif %}

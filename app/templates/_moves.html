@@ -1,0 +1,20 @@
+{% if moves %}
+<table class="moves">
+  <thead>
+    <tr><th>Video</th><th>Group</th><th>Member</th><th>How</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for m in moves %}
+    <tr class="{{ 'undone' if m.undone else '' }}">
+      <td class="mv-file" title="{{ m.dest }}">{{ m.filename }}</td>
+      <td>{{ m.group_name or '—' }}</td>
+      <td>{{ m.member_name or ('— group —' if m.action != 'replica' else '↳ replica') }}</td>
+      <td><span class="tag">{{ m.method or m.action }}</span></td>
+      <td>{% if m.undone %}<span class="muted">undone</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No moves recorded for this batch.</p>
+{% endif %}

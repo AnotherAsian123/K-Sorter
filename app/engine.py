@@ -181,11 +181,13 @@ def apply_item(item: PlanItem, batch_id: str) -> dict:
                                   settings.verify_checksum)
         if primary.status != "moved":
             return {"id": item.id, "status": primary.status, "reason": primary.reason}
-        _journal(batch_id, item.source, primary.dest, "move", primary.method)
+        _journal(batch_id, item.source, primary.dest, "move", primary.method,
+                 item.filename, item.group_name, None)
         for rep in item.replica_dests:
             r = mover.replicate(Path(primary.dest), Path(rep))
             if r.status == "moved":
-                _journal(batch_id, primary.dest, r.dest, "replica", r.method)
+                _journal(batch_id, primary.dest, r.dest, "replica", r.method,
+                         item.filename, _group_from_dest(r.dest), None)
         return {"id": item.id, "status": "moved", "dest": primary.dest,
                 "replicas": len(item.replica_dests)}
 
@@ -194,24 +196,50 @@ def apply_item(item: PlanItem, batch_id: str) -> dict:
     result = mover.safe_move(Path(item.source), Path(item.primary_dest),
                              settings.verify_checksum)
     if result.status == "moved":
-        _journal(batch_id, item.source, result.dest, "move", result.method)
+        _journal(batch_id, item.source, result.dest, "move", result.method,
+                 item.filename, item.group_name, item.member_name)
     return {"id": item.id, "status": result.status, "dest": result.dest,
             "reason": result.reason}
 
 
-def _journal(batch_id, source, dest, action, method) -> None:
+def _group_from_dest(dest: str) -> str:
+    """For a collab replica path <root>/<Group>/Group/<file>, the group folder."""
+    parts = Path(dest).parts
+    return parts[-3] if len(parts) >= 3 else ""
+
+
+def _journal(batch_id, source, dest, action, method,
+             filename=None, group_name=None, member_name=None) -> None:
     db.execute(
-        "INSERT INTO move_journal(batch_id, source, dest, action, method)"
-        " VALUES(?,?,?,?,?)", (batch_id, source, dest, action, method))
+        "INSERT INTO move_journal(batch_id, source, dest, action, method,"
+        " filename, group_name, member_name) VALUES(?,?,?,?,?,?,?,?)",
+        (batch_id, source, dest, action, method, filename, group_name, member_name))
 
 
 # ---- undo -----------------------------------------------------------------
 def list_batches(limit: int = 20) -> list[dict]:
     rows = db.query(
-        "SELECT batch_id, COUNT(*) n, MIN(created_at) at, "
+        "SELECT batch_id, COUNT(*) n, MIN(created_at) at, MAX(created_at) at_end, "
         "SUM(undone) undone FROM move_journal GROUP BY batch_id "
-        "ORDER BY at DESC LIMIT ?", (limit,))
+        "ORDER BY at_end DESC LIMIT ?", (limit,))
     return [dict(r) for r in rows]
+
+
+def get_batch_moves(batch_id: str) -> list[dict]:
+    """All moves in a batch, with friendly labels for the expandable table."""
+    rows = db.query(
+        "SELECT filename, group_name, member_name, action, method, undone, "
+        "source, dest FROM move_journal WHERE batch_id=? ORDER BY id", (batch_id,))
+    out = []
+    for r in rows:
+        d = dict(r)
+        # Fall back to the file/folder names if older rows lack labels.
+        d["filename"] = d["filename"] or Path(d["source"]).name
+        if not d["group_name"]:
+            parts = Path(d["dest"]).parts
+            d["group_name"] = parts[-3] if len(parts) >= 3 else ""
+        out.append(d)
+    return out
 
 
 def undo_batch(batch_id: str) -> dict:

@@ -65,6 +65,19 @@ def test_full_sort_and_undo(tmp_path):
     assert solo.exists() and group_video.exists()
 
 
+def test_history_records_labels(tmp_path):
+    src = tmp_path / "h1"; dst = tmp_path / "h2"
+    src.mkdir(); dst.mkdir()
+    f = _make(src, "230101 TWICE Momo fancam.mp4")
+    vf = VideoFile(path=f, size=f.stat().st_size, stem=f.stem)
+    engine.apply_item(engine.build_plan_item(vf, dst), "hist-batch")
+    moves = engine.get_batch_moves("hist-batch")
+    assert len(moves) == 1
+    assert moves[0]["filename"] == "230101 TWICE Momo fancam.mp4"
+    assert moves[0]["group_name"] == "TWICE"
+    assert moves[0]["member_name"] == "Momo"
+
+
 def test_collab_replicates(tmp_path):
     src = tmp_path / "s2"; dst = tmp_path / "d2"
     src.mkdir(); dst.mkdir()

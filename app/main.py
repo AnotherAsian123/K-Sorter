@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from . import database as db
 from . import enrich, paths, seed
 from .config import settings
-from .engine import get_naming, list_batches, set_naming, undo_batch
+from .engine import get_batch_moves, get_naming, list_batches, set_naming, undo_batch
 from .jobs import manager
 from .logging_setup import get_logger, setup_logging
 from .matcher import get_index, reload_index
@@ -174,6 +174,12 @@ async def update_db():
             log.exception("Manual database update failed")
     threading.Thread(target=_run, daemon=True).start()
     return JSONResponse({"ok": True, "message": "Updating database in the background…"})
+
+
+@app.get("/batch/{batch_id}/moves", response_class=HTMLResponse)
+async def batch_moves(request: Request, batch_id: str):
+    return templates.TemplateResponse(request, "_moves.html", {
+        "request": request, "moves": get_batch_moves(batch_id)})
 
 
 @app.post("/undo")

@@ -68,14 +68,17 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 
 CREATE TABLE IF NOT EXISTS move_journal (
-    id         INTEGER PRIMARY KEY,
-    batch_id   TEXT NOT NULL,
-    source     TEXT NOT NULL,
-    dest       TEXT NOT NULL,
-    action     TEXT NOT NULL,        -- 'move' | 'replica'
-    method     TEXT,                 -- rename | copy | hardlink
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    undone     INTEGER NOT NULL DEFAULT 0
+    id          INTEGER PRIMARY KEY,
+    batch_id    TEXT NOT NULL,
+    source      TEXT NOT NULL,
+    dest        TEXT NOT NULL,
+    action      TEXT NOT NULL,       -- 'move' | 'replica'
+    method      TEXT,                -- rename | copy | hardlink
+    filename    TEXT,                -- the video file name
+    group_name  TEXT,                -- resolved group (display)
+    member_name TEXT,                -- resolved member (display), if any
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    undone      INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS duplicates (
@@ -106,7 +109,16 @@ def get_conn() -> sqlite3.Connection:
             _conn.execute("PRAGMA journal_mode=WAL")
             _conn.execute("PRAGMA foreign_keys=ON")
             _conn.executescript(SCHEMA)
+            _migrate(_conn)
         return _conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add columns to existing DBs created before they were introduced."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(move_journal)")}
+    for col in ("filename", "group_name", "member_name"):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE move_journal ADD COLUMN {col} TEXT")
 
 
 def execute(sql: str, params: Iterable = ()) -> sqlite3.Cursor:
