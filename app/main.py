@@ -62,12 +62,19 @@ async def index(request: Request):
     })
 
 
+def _status_response(request: Request, error: str | None = None):
+    return templates.TemplateResponse(request, "_status.html", {
+        "request": request,
+        "state": manager.state.snapshot(),
+        "running": manager.running,
+        "db_empty": db.counts()["groups"] == 0,
+        "error": error,
+    })
+
+
 @app.get("/status", response_class=HTMLResponse)
 async def status(request: Request):
-    return templates.TemplateResponse(request, "_status.html", {
-        "request": request, "state": manager.state.snapshot(),
-        "running": manager.running,
-    })
+    return _status_response(request)
 
 
 # ---- path validation ------------------------------------------------------
@@ -80,19 +87,23 @@ async def validate_path(request: Request, path: str = Form(""),
 
 # ---- sorting --------------------------------------------------------------
 @app.post("/sort", response_class=HTMLResponse)
-async def sort(request: Request, source: str = Form(...), dest: str = Form(...),
+async def sort(request: Request, source: str = Form(""), dest: str = Form(""),
                mode: str = Form("apply")):
+    # Fall back to the folders configured via env / container mounts, so they
+    # only need to be typed in the UI when overriding to a different location.
+    source = source.strip() or settings.source_default
+    dest = dest.strip() or settings.dest_default
+    if not source and not dest:
+        return _status_response(request, error=(
+            "No source or destination set. Map /source and /destination in the "
+            "container (or enter folders above)."))
     sv = paths.validate_dir(source, need_write=False)
     dv = paths.validate_dir(dest, need_write=True)
     if not sv["ok"] or not dv["ok"]:
-        return templates.TemplateResponse(request, "_status.html", {
-            "request": request, "running": False,
-            "state": manager.state.snapshot(),
-            "error": f"Source: {sv['reason']} | Destination: {dv['reason']}"})
+        return _status_response(request, error=(
+            f"Source: {sv['reason']} | Destination: {dv['reason']}"))
     manager.start(source, dest, apply=(mode == "apply"))
-    return templates.TemplateResponse(request, "_status.html", {
-        "request": request, "state": manager.state.snapshot(),
-        "running": manager.running})
+    return _status_response(request)
 
 
 @app.post("/resolve", response_class=HTMLResponse)
@@ -101,18 +112,13 @@ async def resolve(request: Request, item_id: str = Form(...),
                   learn: str = Form("true")):
     res = manager.resolve(item_id, group_id or None, member_id or None,
                           learn=(learn == "true"))
-    return templates.TemplateResponse(request, "_status.html", {
-        "request": request, "state": manager.state.snapshot(),
-        "running": manager.running,
-        "error": None if res["ok"] else res.get("error")})
+    return _status_response(request, error=None if res["ok"] else res.get("error"))
 
 
 @app.post("/skip", response_class=HTMLResponse)
 async def skip(request: Request, item_id: str = Form(...)):
     manager.skip(item_id)
-    return templates.TemplateResponse(request, "_status.html", {
-        "request": request, "state": manager.state.snapshot(),
-        "running": manager.running})
+    return _status_response(request)
 
 
 # ---- group search (for the confirm dropdown) ------------------------------

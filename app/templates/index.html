@@ -18,6 +18,12 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
     Seeded from the open kpopnet dataset (Korean names, nicknames &amp; former members included).
     Refreshes on restart or on demand.
   </p>
+  {% if counts.groups == 0 %}
+  <div class="banner warn" style="margin-top:12px">
+    ⚠️ The database is empty. Click <strong>Update Database</strong> below to load
+    it — until then, every video will land in the review queue.
+  </div>
+  {% endif %}
   <button class="btn teal small" onclick="updateDb(this)">&#8635; Update Database</button>
   <span id="db-msg" class="muted"></span>
 </div>

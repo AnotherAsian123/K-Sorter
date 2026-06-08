@@ -67,6 +67,7 @@ class PlanItem:
     status: str                       # auto | confirm | manual
     confidence: int
     reason: str
+    help: str = ""                    # plain-language "what to do" for the user
     is_collab: bool = False
     group_id: str | None = None
     group_name: str | None = None
@@ -93,6 +94,22 @@ def _route(res: MatchResult) -> str:
     if res.confidence >= settings.confirm_threshold:
         return "confirm"
     return "manual"
+
+
+def _roster_candidates(group_id: str, fuzzy: list[tuple[EntityRef, int]]) -> list[dict]:
+    """Full member roster for a group, with any fuzzy guesses scored and sorted
+    to the top — so the confirm dropdown is always usable, not just when a fuzzy
+    guess existed."""
+    idx = get_index()
+    scores = {e.id: s for e, s in fuzzy}
+    out = []
+    for mid in idx.group_to_members.get(group_id, []):
+        m = idx.members.get(mid)
+        if m:
+            out.append({"id": m.id, "name": m.name, "name_ko": m.name_ko,
+                        "score": scores.get(m.id, 0)})
+    out.sort(key=lambda c: (-c["score"], c["name"]))
+    return out
 
 
 def _cands(pairs: list[tuple[EntityRef, int]]) -> list[dict]:
@@ -132,11 +149,27 @@ def build_plan_item(vf: VideoFile, dest_root: Path) -> PlanItem:
         item.member_id = res.member.id
         item.member_name = res.member.name
 
-    if status in ("auto",):
+    if status == "auto":
         if res.member:
             item.primary_dest = str(_solo_dir(dest_root, res.group, res.member, lang, template) / vf.path.name)
         else:
             item.primary_dest = str(dest_root / _name(res.group, lang) / GROUP_SUBFOLDER / vf.path.name)
+        return item
+
+    # --- explain (in plain language) why this one needs a human, and make the
+    #     confirm UI immediately actionable ---
+    if status == "manual":
+        item.help = ("We couldn't match a group from the filename. "
+                     "Search the database below, or look the group up online.")
+    elif res.ambiguous and len(item.group_candidates) > 1:
+        item.help = "More than one group could match — pick the right one."
+    elif res.is_solo and res.member is None and res.group:
+        # Group is known; just need the member. Offer the FULL roster.
+        item.help = (f"Found {res.group.name}, but couldn't tell which member. "
+                     f"Pick the member — or choose “group folder” if it's the whole group.")
+        item.member_candidates = _roster_candidates(res.group.id, res.member_candidates)
+    else:
+        item.help = "Low confidence — please confirm the group (and member)."
     return item
 
 

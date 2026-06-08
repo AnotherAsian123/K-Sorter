@@ -5,6 +5,14 @@
 
 {% if error %}<div class="banner err">{{ error }} &mdash; see the log file for full details.</div>{% endif %}
 
+{% if db_empty and not running %}
+<div class="banner warn">
+  ⚠️ The group database is <strong>empty</strong>, so nothing can be matched yet —
+  that's why everything below needs review. Click <strong>“⟳ Update Database”</strong>
+  at the top to load it, then run the sort again.
+</div>
+{% endif %}
+
 {% if state.status != 'idle' %}
 <div class="card job">
   <h2 class="job-head">
@@ -48,11 +56,12 @@
 {% if state.review %}
 <div class="card">
   <h2>A quick yes-or-yes? <span class="chip confirm">{{ state.review|length }}</span></h2>
-  <p class="muted">We have a good guess but want to be sure before moving these.</p>
+  <p class="muted">Found a likely match but want your nod before moving these. Pick &amp; confirm, or skip.</p>
   {% for it in state.review %}
   <div class="item">
     <div class="fname">{{ it.filename }}</div>
-    <div class="meta">{{ it.reason }} &middot; confidence {{ it.confidence }}%
+    <div class="why">{{ it.help or it.reason }}</div>
+    <div class="meta">confidence {{ it.confidence }}%
       {% if it.group_name %}&middot; guess: <strong>{{ it.group_name }}</strong>{% if it.member_name %} / {{ it.member_name }}{% endif %}{% endif %}
     </div>
     <form hx-post="/resolve" hx-target="#status" hx-swap="innerHTML" class="controls">
@@ -87,7 +96,7 @@
   {% for it in state.manual %}
   <div class="item" x-data="manualItem('{{ it.id }}')">
     <div class="fname">{{ it.filename }}</div>
-    <div class="meta">{{ it.reason }}</div>
+    <div class="why">{{ it.help or it.reason }}</div>
     <div class="controls">
       <input type="text" placeholder="Search group&hellip;" x-model="q" @keyup.debounce.400ms="searchGroups()">
       <select x-model="groupId" @change="loadMembers()">

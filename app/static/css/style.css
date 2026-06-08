@@ -130,6 +130,9 @@ input:focus, select:focus { outline: none; border-color: var(--sage);
 [data-theme="dark"] .item { background: rgba(0,0,0,.15); }
 @keyframes settle { from { opacity: 0; transform: scale(.98); } to { opacity: 1; transform: none; } }
 .item .fname { font-weight: 600; word-break: break-all; }
+.item .why { font-size: .86rem; color: var(--text); margin: 5px 0 2px;
+  padding: 6px 10px; border-radius: 8px; background: rgba(193,152,117,.16);
+  border-left: 3px solid var(--clay); }
 .item .meta { font-size: .8rem; color: var(--muted); margin: 4px 0 10px; }
 .item form { display: inline; }
 .item .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
