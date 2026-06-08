@@ -73,6 +73,20 @@ Mount the SMB/NFS share on the Unraid host and bind-mount it into the container
 (the standard Unraid approach). Cross-filesystem moves automatically use the safe
 copy-verify-delete path.
 
+### Moves & performance (why moves are instant — or not)
+K-Sorter picks the fastest safe method automatically:
+1. **Atomic rename** when source and destination share a mount point.
+2. **Hardlink + unlink** when they're *separate* bind mounts (e.g. `/source` and
+   `/destination`, or `/watch` and `/watch_dest`) but on the **same physical
+   disk/pool** — instant, no data copied. (Linux can't `rename()` across mount
+   points, which is the harmless `Invalid cross-device link` you may see in the
+   log right before it hardlinks instead.)
+3. **Copy → verify → delete** only when the two folders are genuinely on
+   **different filesystems** (e.g. cache pool → array). Safe, just slower.
+
+For the fastest moves, keep your source and destination on the **same disk/pool**
+(or under one share). If you map them to different disks, expect copies.
+
 ## Run locally (dev)
 
 ```bash

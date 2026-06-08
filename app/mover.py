@@ -1,15 +1,20 @@
 """Safe, fast, verified file operations (plan.md §5 step 6).
 
-Rules:
-  - Same filesystem  -> atomic os.replace (rename). Instant, no copy.
-  - Cross filesystem -> copy to temp, verify size (+ optional checksum),
-                        atomic-swap into place, then remove the source.
+Move strategy, fastest-first:
+  1. os.replace (atomic rename)  -> instant, when src & dest share a mount point.
+  2. hardlink + unlink           -> instant, no data copied, for separate bind
+                                    mounts on the SAME underlying filesystem
+                                    (the common Unraid case: /watch + /watch_dest
+                                    mapped as different volumes on one disk).
+  3. copy -> verify -> delete    -> only when genuinely on different filesystems.
+
   - Never overwrite. Collisions are skipped and reported.
   - Filenames are never altered; only their parent folder changes.
   - Folder names are sanitized so nothing can escape the destination root.
 """
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import re
@@ -32,20 +37,6 @@ def sanitize_component(name: str) -> str:
     return name or "Unknown"
 
 
-def _same_filesystem(a: Path, b: Path) -> bool:
-    """Best-effort: compare the device of existing ancestors."""
-    try:
-        a_anchor = a if a.exists() else a.parent
-        while not a_anchor.exists() and a_anchor != a_anchor.parent:
-            a_anchor = a_anchor.parent
-        b_anchor = b if b.exists() else b.parent
-        while not b_anchor.exists() and b_anchor != b_anchor.parent:
-            b_anchor = b_anchor.parent
-        return a_anchor.stat().st_dev == b_anchor.stat().st_dev
-    except OSError:
-        return False
-
-
 def _sha256(path: Path, chunk: int = 1024 * 1024) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -57,7 +48,7 @@ def _sha256(path: Path, chunk: int = 1024 * 1024) -> str:
 @dataclass
 class MoveResult:
     status: str          # 'moved' | 'skipped' | 'error'
-    method: str = ""     # 'rename' | 'copy'
+    method: str = ""     # 'rename' | 'hardlink' | 'copy'
     dest: str = ""
     reason: str = ""
 
@@ -72,16 +63,32 @@ def safe_move(src: Path, dest: Path, verify_checksum: bool = False) -> MoveResul
 
     dest.parent.mkdir(parents=True, exist_ok=True)
 
-    # Fast path: atomic rename on the same filesystem.
-    if _same_filesystem(src, dest):
-        try:
-            os.replace(src, dest)
-            log.info("MOVE rename: %s -> %s", src, dest)
-            return MoveResult("moved", method="rename", dest=str(dest))
-        except OSError as exc:
-            log.warning("rename failed (%s); falling back to copy: %s -> %s", exc, src, dest)
+    # 1) Atomic rename — instant when src & dest share a mount point.
+    try:
+        os.replace(src, dest)
+        log.info("MOVE rename: %s -> %s", src, dest)
+        return MoveResult("moved", method="rename", dest=str(dest))
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            # A real problem (permissions, read-only, etc.) — not just a mount
+            # boundary. Worth a warning; we still try the safe fallbacks below.
+            log.warning("rename failed (%s); trying link/copy: %s -> %s", exc, src, dest)
 
-    # Cross-filesystem: copy -> verify -> swap -> remove source.
+    # 2) Hardlink + unlink — instant, no copy, for separate bind mounts on the
+    #    same underlying filesystem (typical Unraid /watch -> /watch_dest).
+    try:
+        os.link(src, dest)
+    except OSError:
+        pass  # different filesystem (or no hardlink support) -> real copy
+    else:
+        try:
+            src.unlink()
+        except OSError:
+            log.warning("hardlinked but could not remove source: %s", src)
+        log.info("MOVE hardlink (cross-mount, same fs): %s -> %s", src, dest)
+        return MoveResult("moved", method="hardlink", dest=str(dest))
+
+    # 3) Cross-filesystem: copy -> verify -> swap -> remove source.
     tmp = dest.with_name(dest.name + ".ksort-tmp")
     try:
         shutil.copyfile(src, tmp)

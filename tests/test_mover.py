@@ -1,0 +1,57 @@
+"""Move-strategy tests, including the cross-mount (EXDEV) fallbacks that the
+Unraid /watch -> /watch_dest setup triggers."""
+import errno
+import os
+import tempfile
+
+os.environ["KSORTER_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ksorter-mover-")
+
+from app import mover  # noqa: E402
+
+_REAL_REPLACE = os.replace
+_REAL_LINK = os.link
+
+
+def _exdev_when_moving(src):
+    """Raise EXDEV only for the initial src->dest move, so the copy path's
+    own temp-swap (tmp->dest) still works normally."""
+    def _inner(a, b):
+        if str(a) == str(src):
+            raise OSError(errno.EXDEV, "Invalid cross-device link")
+        return _REAL_REPLACE(a, b)
+    return _inner
+
+
+def test_same_mount_uses_rename(tmp_path):
+    src = tmp_path / "a.mp4"; src.write_bytes(b"x" * 1024)
+    dest = tmp_path / "out" / "a.mp4"
+    r = mover.safe_move(src, dest)
+    assert r.status == "moved" and r.method == "rename"
+    assert dest.exists() and not src.exists()
+
+
+def test_cross_mount_falls_back_to_hardlink(tmp_path, monkeypatch):
+    # Separate bind mounts: rename raises EXDEV, but hardlink works (same fs).
+    src = tmp_path / "b.mp4"; src.write_bytes(b"y" * 2048)
+    dest = tmp_path / "dst" / "b.mp4"
+    monkeypatch.setattr(mover.os, "replace", _exdev_when_moving(src))
+    r = mover.safe_move(src, dest)
+    assert r.status == "moved" and r.method == "hardlink", r
+    assert dest.exists() and not src.exists()
+    assert dest.read_bytes() == b"y" * 2048
+
+
+def test_truly_different_fs_falls_back_to_copy(tmp_path, monkeypatch):
+    # Both rename AND hardlink fail with EXDEV -> safe copy+verify+delete.
+    src = tmp_path / "c.mp4"; src.write_bytes(b"z" * 4096)
+    dest = tmp_path / "dst2" / "c.mp4"
+    monkeypatch.setattr(mover.os, "replace", _exdev_when_moving(src))
+
+    def link_exdev(*_a, **_k):
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+    monkeypatch.setattr(mover.os, "link", link_exdev)
+
+    r = mover.safe_move(src, dest)
+    assert r.status == "moved" and r.method == "copy", r
+    assert dest.exists() and not src.exists()
+    assert dest.read_bytes() == b"z" * 4096
