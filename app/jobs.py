@@ -234,6 +234,9 @@ class JobManager:
             st.moved += 1
             if learn:
                 engine.learn_correction(Path(item.filename).stem, group_id, member_id)
+            # Remember the user's placement so the audit won't re-flag it.
+            engine.record_decision(item.filename,
+                                   engine.rel_location(result.get("dest", ""), Path(st.dest)))
             queue.pop(idx)
             return {"ok": True, "dest": result.get("dest")}
         return {"ok": False, "error": result.get("reason", result["status"])}
@@ -276,12 +279,21 @@ class JobManager:
         result = engine.apply_item(item, st.batch_id)
         if result["status"] == "moved":
             st.moved += 1
+            engine.record_decision(item.filename,
+                                   engine.rel_location(result.get("dest", ""), Path(st.dest)))
             queue.pop(idx)
             return {"ok": True, "dest": result.get("dest")}
         return {"ok": False, "error": result.get("reason", result["status"])}
 
     def skip(self, item_id: str) -> dict:
         st = self.state
+        # Skipping an AUDIT item means "this is fine where it is" — remember that
+        # so future integrity checks leave it alone.
+        for lst in (st.review, st.manual):
+            for it in lst:
+                if it["id"] == item_id and it.get("current_location"):
+                    engine.record_decision(it["filename"], it["current_location"])
+                    break
         st.review = [it for it in st.review if it["id"] != item_id]
         st.manual = [it for it in st.manual if it["id"] != item_id]
         return {"ok": True}

@@ -56,6 +56,20 @@ async function resetLearned(btn) {
   btn.disabled = false;
 }
 
+async function resetApprovals(btn) {
+  if (!confirm("Re-check all files in future audits? This forgets which files you marked OK.")) return;
+  btn.disabled = true;
+  const msg = document.getElementById("approvals-msg");
+  try {
+    const r = await postForm("/db/reset-approvals", {});
+    const j = await r.json();
+    msg.textContent = ` Cleared ${j.removed} approval(s).`;
+  } catch (e) {
+    msg.textContent = " Reset failed — see the log file.";
+  }
+  btn.disabled = false;
+}
+
 async function undoBatch(batchId, btn) {
   btn.disabled = true;
   btn.textContent = "Undoing…";

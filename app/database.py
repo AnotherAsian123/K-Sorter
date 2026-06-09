@@ -89,6 +89,14 @@ CREATE TABLE IF NOT EXISTS duplicates (
     detected_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- User-approved placements: a file the user skipped or manually sorted to a
+-- location. The integrity audit won't re-flag it while it stays there.
+CREATE TABLE IF NOT EXISTS sort_decisions (
+    file_key   TEXT PRIMARY KEY,     -- the video file name
+    location   TEXT NOT NULL,        -- approved relative location (e.g. STAYC/Yoon)
+    decided_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_aliases_alias ON aliases(alias);
 CREATE INDEX IF NOT EXISTS idx_journal_batch ON move_journal(batch_id);
 CREATE INDEX IF NOT EXISTS idx_dupes_key ON duplicates(group_key);

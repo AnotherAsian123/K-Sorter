@@ -240,7 +240,8 @@ def _group_detail(request: Request, gid: str | None, refresh: bool = False):
 @app.get("/manage", response_class=HTMLResponse)
 async def manage_page(request: Request):
     return templates.TemplateResponse(request, "manage.html", {
-        "request": request, "counts": db.counts()})
+        "request": request, "counts": db.counts(),
+        "approvals": engine.count_decisions()})
 
 
 @app.get("/db/groups", response_class=HTMLResponse)
@@ -319,6 +320,12 @@ async def db_member_remove(request: Request, gid: str, mid: str):
 @app.post("/db/reset-learned")
 async def db_reset_learned():
     n = engine.reset_learned_aliases()
+    return JSONResponse({"ok": True, "removed": n})
+
+
+@app.post("/db/reset-approvals")
+async def db_reset_approvals():
+    n = engine.reset_decisions()
     return JSONResponse({"ok": True, "removed": n})
 
 

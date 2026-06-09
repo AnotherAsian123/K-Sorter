@@ -92,6 +92,11 @@ def audit_destination(dest_root: str | Path,
                          and parts[1] != engine.GROUP_SUBFOLDER else None)
         location = top + "/" + (member_folder or engine.GROUP_SUBFOLDER)
 
+        # Respect earlier decisions: if the user already approved this file at
+        # this location (skipped or sorted it here), don't re-flag it.
+        if engine.get_decision(vf.path.name) == location:
+            continue
+
         res = idx.match(vf.stem)
         # Gate on GROUP certainty (a solo video with an unresolved member is
         # still a confident group match — we can verify the folder).

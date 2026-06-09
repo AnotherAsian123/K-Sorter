@@ -70,3 +70,23 @@ def test_special_stages_not_flagged(tmp_path):
 def test_unidentifiable_not_flagged(tmp_path):
     _put(tmp_path, "STAYC", "Group", "random home clip.mkv")
     assert list(audit.audit_destination(tmp_path)) == []
+
+
+def test_skipped_decision_persists(tmp_path):
+    from app import engine
+    from app.jobs import manager
+    engine.reset_decisions()
+    _put(tmp_path, "fromis_9", "Group", "STAYC concert fancam.mkv")
+    flags = list(audit.audit_destination(tmp_path))
+    assert len(flags) == 1
+
+    manager.state.review = [flags[0].as_dict()]
+    manager.state.manual = []
+    manager.state.dest = str(tmp_path)
+    manager.skip(flags[0].id)
+    assert engine.get_decision("STAYC concert fancam.mkv") == "fromis_9/Group"
+
+    # Future audits leave it alone — until approvals are reset.
+    assert list(audit.audit_destination(tmp_path)) == []
+    engine.reset_decisions()
+    assert len(list(audit.audit_destination(tmp_path))) == 1

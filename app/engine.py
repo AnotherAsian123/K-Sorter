@@ -348,3 +348,37 @@ def reset_learned_aliases() -> int:
     reload_index()
     log.info("Reset %d learned alias(es)", len(rows))
     return len(rows)
+
+
+# ---- audit decisions (persist across sessions, plan.md integrity check) ----
+def rel_location(full_dest: str, dest_root: Path) -> str:
+    """The relative 'Group/Sub' location of a destination path."""
+    try:
+        return Path(full_dest).parent.relative_to(dest_root).as_posix()
+    except ValueError:
+        return ""
+
+
+def record_decision(filename: str, location: str) -> None:
+    """Remember that the user approved `filename` living at `location` (by
+    skipping it there or sorting it there), so the audit won't re-flag it."""
+    if not filename or not location:
+        return
+    db.execute("INSERT OR REPLACE INTO sort_decisions(file_key, location) VALUES(?,?)",
+               (filename, location))
+
+
+def get_decision(filename: str) -> str | None:
+    row = db.query_one("SELECT location FROM sort_decisions WHERE file_key = ?", (filename,))
+    return row["location"] if row else None
+
+
+def count_decisions() -> int:
+    return db.query_one("SELECT COUNT(*) c FROM sort_decisions")["c"]
+
+
+def reset_decisions() -> int:
+    n = count_decisions()
+    db.execute("DELETE FROM sort_decisions")
+    log.info("Cleared %d audit approval(s)", n)
+    return n

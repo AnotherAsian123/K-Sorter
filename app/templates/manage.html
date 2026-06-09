@@ -21,6 +21,14 @@
   </p>
   <button class="btn clay small" onclick="resetLearned(this)">↺ Reset learned aliases</button>
   <span id="reset-msg" class="muted"></span>
+
+  <p class="muted" style="margin-top:14px">
+    “Audit approvals” are files you skipped or sorted during an integrity check —
+    they won't be flagged again. Reset to re-check everything.
+    <strong>{{ approvals }}</strong> approved.
+  </p>
+  <button class="btn clay small" onclick="resetApprovals(this)">↺ Reset audit approvals</button>
+  <span id="approvals-msg" class="muted"></span>
 </div>
 
 <div class="manage-grid">
