@@ -151,11 +151,16 @@ class JobManager:
     def resolve(self, item_id: str, group_id: str | None,
                 member_id: str | None, learn: bool = True) -> dict:
         st = self.state
-        idx = next((i for i, it in enumerate(st.review) if it["id"] == item_id), None)
-        if idx is None:
-            return {"ok": False, "error": "Item not found in review queue."}
-        item_dict = st.review[idx]
-        item = engine.PlanItem(**item_dict)
+        # Items can live in either queue (confirm or manual) — resolve both.
+        queue = idx = None
+        for lst in (st.review, st.manual):
+            j = next((i for i, it in enumerate(lst) if it["id"] == item_id), None)
+            if j is not None:
+                queue, idx = lst, j
+                break
+        if queue is None:
+            return {"ok": False, "error": "Item not found (already handled?)."}
+        item = engine.PlanItem(**queue[idx])
 
         if not group_id:
             return {"ok": False, "error": "Pick a group."}
@@ -183,7 +188,7 @@ class JobManager:
             st.moved += 1
             if learn:
                 engine.learn_correction(Path(item.filename).stem, group_id, member_id)
-            st.review.pop(idx)
+            queue.pop(idx)
             return {"ok": True, "dest": result.get("dest")}
         return {"ok": False, "error": result.get("reason", result["status"])}
 

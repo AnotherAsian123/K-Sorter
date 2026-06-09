@@ -55,17 +55,19 @@ async function undoBatch(batchId, btn) {
   }
 }
 
-// Review-item: when the group changes, reload that group's members.
-async function loadMembers(sel) {
-  const gid = sel.value;
-  const memberSel = sel.parentElement.querySelector("select[name=member_id]");
-  if (!gid || !memberSel) return;
-  const r = await fetch(`/members/search?group_id=${encodeURIComponent(gid)}`);
-  const list = await r.json();
-  memberSel.innerHTML =
-    '<option value="">— group folder (no member) —</option>' +
-    list.map((m) => `<option value="${m.id}">${m.name}</option>`).join("");
-}
+// Keep the page where it is across #status swaps (so confirming an item doesn't
+// jump you to the bottom). Covers htmx forms + polling.
+(function () {
+  let y = null;
+  function isStatus(e) {
+    const t = (e.detail && e.detail.target) || e.target;
+    return t && t.id === "status";
+  }
+  document.addEventListener("htmx:beforeSwap", (e) => { if (isStatus(e)) y = window.scrollY; });
+  document.addEventListener("htmx:afterSettle", (e) => {
+    if (isStatus(e) && y !== null) { window.scrollTo(0, y); y = null; }
+  });
+})();
 
 document.addEventListener("alpine:init", () => {
   const n = window.KS_NAMING || { language: "en", template: "nested" };
@@ -79,21 +81,35 @@ document.addEventListener("alpine:init", () => {
     },
   }));
 
-  Alpine.data("manualItem", (id) => ({
-    id, q: "", groups: [], groupId: "", members: [], memberId: "", online: [],
+  // One resolver for BOTH the confirm and manual queues: candidate quick-picks
+  // PLUS a search box and online lookup, so you can always reach the right group
+  // even when the suggestions are wrong or the group isn't in the DB yet.
+  Alpine.data("resolveItem", (id, groupCands, memberCands, presetGroupId) => ({
+    id,
+    groups: groupCands || [],
+    members: memberCands || [],
+    groupId: presetGroupId || ((groupCands && groupCands[0]) ? groupCands[0].id : ""),
+    memberId: "",
+    q: "", online: [], busy: false,
+    init() { if (this.groupId && !this.members.length) this.loadMembers(); },
     async searchGroups() {
-      if (!this.q.trim()) { this.groups = []; return; }
+      if (!this.q.trim()) return;
       const r = await fetch(`/groups/search?q=${encodeURIComponent(this.q)}`);
       this.groups = await r.json();
+      if (this.groups.length && !this.groups.find((g) => g.id === this.groupId)) {
+        this.groupId = this.groups[0].id;
+        await this.loadMembers();
+      }
     },
     async loadMembers() {
-      this.members = []; this.memberId = "";
-      if (!this.groupId) return;
+      this.memberId = "";
+      if (!this.groupId) { this.members = []; return; }
       const r = await fetch(`/members/search?group_id=${encodeURIComponent(this.groupId)}`);
       this.members = await r.json();
     },
     async confirm() {
-      if (!this.groupId) return;
+      if (!this.groupId || this.busy) return;
+      this.busy = true;
       await swapStatus("/resolve", {
         item_id: this.id, group_id: this.groupId,
         member_id: this.memberId, learn: "true",
@@ -101,15 +117,19 @@ document.addEventListener("alpine:init", () => {
     },
     async skip() { await swapStatus("/skip", { item_id: this.id }); },
     async lookup() {
-      if (!this.q.trim()) { alert("Type a group name to look up first."); return; }
-      const r = await postForm("/enrich/search", { name: this.q });
+      const term = this.q.trim();
+      if (!term) { alert("Type the group's name in the search box first, then look it up."); return; }
+      this.online = [{ title: "Searching…", url: "#", _loading: true }];
+      const r = await postForm("/enrich/search", { name: term });
       this.online = await r.json();
+      if (!this.online.length) this.online = [{ title: "No results — try a different spelling.", url: "#", _none: true }];
     },
-    async addOnline(title) {
-      const r = await postForm("/enrich/add", { name: title });
+    async addOnline(cand) {
+      if (cand._loading || cand._none) return;
+      const r = await postForm("/enrich/add", { name: cand.title });
       const j = await r.json();
       if (j.ok) {
-        this.groups = [{ id: j.group_id, name: title, name_ko: "" }, ...this.groups];
+        this.groups = [{ id: j.group_id, name: cand.title, name_ko: "" }, ...this.groups];
         this.groupId = j.group_id;
         this.online = [];
         await this.loadMembers();

@@ -3,6 +3,40 @@
 <div hx-get="/status" hx-trigger="every 1s" hx-target="#status" hx-swap="innerHTML"></div>
 {% endif %}
 
+{# One resolver used by BOTH queues: candidate quick-picks + free search + online
+   lookup, so the correct group is always reachable even if it isn't suggested. #}
+{% macro resolver(it) %}
+<div class="item" x-data='resolveItem("{{ it.id }}", {{ it.group_candidates|tojson }}, {{ it.member_candidates|tojson }}, "{{ it.group_id or "" }}")'>
+  <div class="fname">{{ it.filename }}</div>
+  <div class="why">{{ it.help or it.reason }}</div>
+  {% if it.confidence %}<div class="meta">best guess confidence {{ it.confidence }}%</div>{% endif %}
+  <div class="controls">
+    <select x-model="groupId" @change="loadMembers()" title="Group">
+      <option value="">&mdash; pick group &mdash;</option>
+      <template x-for="g in groups" :key="g.id"><option :value="g.id" x-text="g.name + (g.name_ko ? ' ('+g.name_ko+')' : '') + (g.score ? ' · '+g.score+'%' : '')"></option></template>
+    </select>
+    <input type="text" placeholder="Search group&hellip;" x-model="q"
+           @keyup.debounce.400ms="searchGroups()" @keydown.enter.prevent="searchGroups()">
+    <select x-model="memberId" title="Member">
+      <option value="">&mdash; group folder (no member) &mdash;</option>
+      <template x-for="m in members" :key="m.id"><option :value="m.id" x-text="m.name + (m.name_ko ? ' ('+m.name_ko+')' : '')"></option></template>
+    </select>
+    <button class="btn small" @click="confirm()" :disabled="!groupId">&#10003; Confirm</button>
+    <button class="btn teal small" @click="lookup()">&#128270; Look up online</button>
+    <button class="btn secondary small" @click="skip()">Skip</button>
+  </div>
+  <div class="meta" x-show="online.length" style="margin-top:8px">
+    <template x-for="(o, idx) in online" :key="idx">
+      <div>&bull;
+        <span x-show="o._loading || o._none" x-text="o.title"></span>
+        <a x-show="!o._loading && !o._none" :href="o.url" target="_blank" x-text="o.title"></a>
+        <button class="btn small" x-show="!o._loading && !o._none" @click="addOnline(o)">Add as new group</button>
+      </div>
+    </template>
+  </div>
+</div>
+{% endmacro %}
+
 {% if error %}<div class="banner err">{{ error }} &mdash; see the log file for full details.</div>{% endif %}
 
 {% if db_empty and not running %}
@@ -56,35 +90,9 @@
 {% if state.review %}
 <div class="card">
   <h2>A quick yes-or-yes? <span class="chip confirm">{{ state.review|length }}</span></h2>
-  <p class="muted">Found a likely match but want your nod before moving these. Pick &amp; confirm, or skip.</p>
-  {% for it in state.review %}
-  <div class="item">
-    <div class="fname">{{ it.filename }}</div>
-    <div class="why">{{ it.help or it.reason }}</div>
-    <div class="meta">confidence {{ it.confidence }}%
-      {% if it.group_name %}&middot; guess: <strong>{{ it.group_name }}</strong>{% if it.member_name %} / {{ it.member_name }}{% endif %}{% endif %}
-    </div>
-    <form hx-post="/resolve" hx-target="#status" hx-swap="innerHTML" class="controls">
-      <input type="hidden" name="item_id" value="{{ it.id }}">
-      <select name="group_id" onchange="loadMembers(this)">
-        {% if it.group_candidates %}
-          {% for c in it.group_candidates %}<option value="{{ c.id }}">{{ c.name }}{% if c.name_ko %} ({{ c.name_ko }}){% endif %} &middot; {{ c.score }}%</option>{% endfor %}
-        {% elif it.group_id %}
-          <option value="{{ it.group_id }}">{{ it.group_name }}</option>
-        {% endif %}
-      </select>
-      <select name="member_id">
-        <option value="">&mdash; group folder (no member) &mdash;</option>
-        {% for c in it.member_candidates %}<option value="{{ c.id }}">{{ c.name }}{% if c.name_ko %} ({{ c.name_ko }}){% endif %} &middot; {{ c.score }}%</option>{% endfor %}
-      </select>
-      <button class="btn small" type="submit">&#10003; Confirm</button>
-    </form>
-    <form hx-post="/skip" hx-target="#status" hx-swap="innerHTML" style="display:inline">
-      <input type="hidden" name="item_id" value="{{ it.id }}">
-      <button class="btn secondary small" type="submit">Skip</button>
-    </form>
-  </div>
-  {% endfor %}
+  <p class="muted">Found a likely match but want your nod before moving these. If the
+    suggestion is wrong, search for the right group or look it up online &mdash; then Confirm.</p>
+  {% for it in state.review %}{{ resolver(it) }}{% endfor %}
 </div>
 {% endif %}
 
@@ -92,33 +100,8 @@
 {% if state.manual %}
 <div class="card">
   <h2>Need a human touch <span class="chip manual">{{ state.manual|length }}</span></h2>
-  <p class="muted">No confident match &mdash; search the database, or look one up online.</p>
-  {% for it in state.manual %}
-  <div class="item" x-data="manualItem('{{ it.id }}')">
-    <div class="fname">{{ it.filename }}</div>
-    <div class="why">{{ it.help or it.reason }}</div>
-    <div class="controls">
-      <input type="text" placeholder="Search group&hellip;" x-model="q" @keyup.debounce.400ms="searchGroups()">
-      <select x-model="groupId" @change="loadMembers()">
-        <option value="">&mdash; pick group &mdash;</option>
-        <template x-for="g in groups" :key="g.id"><option :value="g.id" x-text="g.name + (g.name_ko ? ' ('+g.name_ko+')' : '')"></option></template>
-      </select>
-      <select x-model="memberId">
-        <option value="">&mdash; group folder (no member) &mdash;</option>
-        <template x-for="m in members" :key="m.id"><option :value="m.id" x-text="m.name"></option></template>
-      </select>
-      <button class="btn small" @click="confirm()" :disabled="!groupId">&#10003; Sort</button>
-      <button class="btn teal small" @click="lookup()">&#128270; Look up online</button>
-      <button class="btn secondary small" @click="skip()">Skip</button>
-    </div>
-    <div class="meta" x-show="online.length" style="margin-top:8px">
-      <template x-for="o in online" :key="o.url">
-        <div>&bull; <a :href="o.url" target="_blank" x-text="o.title"></a>
-          <button class="btn small" @click="addOnline(o.title)">Add as new group</button></div>
-      </template>
-    </div>
-  </div>
-  {% endfor %}
+  <p class="muted">No confident match &mdash; search the database, or look one up online and add it.</p>
+  {% for it in state.manual %}{{ resolver(it) }}{% endfor %}
 </div>
 {% endif %}
 

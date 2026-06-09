@@ -93,6 +93,25 @@ def test_collab_replicates(tmp_path):
     assert (dst / "ITZY" / "Group" / f.name).exists()
 
 
+def test_resolve_from_manual_queue(tmp_path):
+    # Regression: items in the manual queue (not just the confirm queue) must
+    # be resolvable.
+    from app.jobs import manager
+    src = tmp_path / "mq"; dst = tmp_path / "mqd"
+    src.mkdir(); dst.mkdir()
+    f = _make(src, "totally unknown video.mp4")
+    item = engine.build_plan_item(VideoFile(path=f, size=f.stat().st_size, stem=f.stem), dst)
+    assert item.status == "manual"
+    manager.state.manual = [item.as_dict()]
+    manager.state.review = []
+    manager.state.dest = str(dst)
+    manager.state.batch_id = "mqb"
+    res = manager.resolve(item.id, "twice", "momo", learn=False)
+    assert res["ok"], res
+    assert (dst / "TWICE" / "Momo" / "totally unknown video.mp4").exists()
+    assert not manager.state.manual  # removed from the queue
+
+
 def test_unknown_goes_manual(tmp_path):
     src = tmp_path / "s3"; dst = tmp_path / "d3"
     src.mkdir(); dst.mkdir()
