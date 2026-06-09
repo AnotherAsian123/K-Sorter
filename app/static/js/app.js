@@ -91,14 +91,29 @@ document.addEventListener("alpine:init", () => {
     groupId: presetGroupId || ((groupCands && groupCands[0]) ? groupCands[0].id : ""),
     memberId: "",
     q: "", online: [], busy: false, lookupBusy: false, addBusy: false, newMember: "",
-    init() { if (this.groupId && !this.members.length) this.loadMembers(); },
+    init() {
+      // Whenever the group changes (search, dropdown, or online-add), pull that
+      // group's members automatically — no separate member lookup needed.
+      this.$watch("groupId", () => this.loadMembers());
+      if (this.groupId && !this.members.length) this.loadMembers();
+    },
     async searchGroups() {
-      if (!this.q.trim()) return;
-      const r = await fetch(`/groups/search?q=${encodeURIComponent(this.q)}`);
-      this.groups = await r.json();
-      if (this.groups.length && !this.groups.find((g) => g.id === this.groupId)) {
-        this.groupId = this.groups[0].id;
-        await this.loadMembers();
+      const q = this.q.trim();
+      if (!q) return;
+      const r = await fetch(`/groups/search?q=${encodeURIComponent(q)}`);
+      const list = await r.json();
+      // Best match first: exact name, then starts-with, then contains.
+      const ql = q.toLowerCase();
+      const score = (g) => {
+        const n = (g.name || "").toLowerCase();
+        return n === ql ? 3 : n.startsWith(ql) ? 2 : n.includes(ql) ? 1 : 0;
+      };
+      list.sort((a, b) => score(b) - score(a));
+      this.groups = list;
+      if (list.length) {
+        // Selecting the top match triggers the watcher -> members load.
+        if (this.groupId !== list[0].id) this.groupId = list[0].id;
+        else this.loadMembers();
       }
     },
     async loadMembers() {
@@ -158,9 +173,8 @@ document.addEventListener("alpine:init", () => {
       this.addBusy = false;
       if (j.ok) {
         this.groups = [{ id: j.group_id, name: cand.title, name_ko: "" }, ...this.groups];
-        this.groupId = j.group_id;
+        this.groupId = j.group_id;  // watcher loads members (empty for a new group)
         this.online = [];
-        await this.loadMembers();
       }
     },
   }));

@@ -11,7 +11,7 @@
   <div class="why">{{ it.help or it.reason }}</div>
   {% if it.confidence %}<div class="meta">best guess confidence {{ it.confidence }}%</div>{% endif %}
   <div class="controls">
-    <select x-model="groupId" @change="loadMembers()" title="Group">
+    <select x-model="groupId" title="Group">
       <option value="">&mdash; pick group &mdash;</option>
       <template x-for="g in groups" :key="g.id"><option :value="g.id" x-text="g.name + (g.name_ko ? ' ('+g.name_ko+')' : '') + (g.score ? ' · '+g.score+'%' : '')"></option></template>
     </select>
