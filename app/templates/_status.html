@@ -26,15 +26,18 @@
            title="Member missing? Add them to this group.">
     <button class="btn teal small" @click="addMember()" x-show="groupId" :disabled="!newMember.trim()">+ Member</button>
     <button class="btn small" @click="confirm()" :disabled="!groupId">&#10003; Confirm</button>
-    <button class="btn teal small" @click="lookup()">&#128270; Look up online</button>
+    <button class="btn teal small" @click="lookup()" :disabled="lookupBusy"
+            x-text="lookupBusy ? '⏳ Searching…' : '🔍 Look up online'"></button>
     <button class="btn secondary small" @click="skip()">Skip</button>
   </div>
-  <div class="meta" x-show="online.length" style="margin-top:8px">
+  <div class="online-box" x-show="online.length" style="margin-top:10px">
     <template x-for="(o, idx) in online" :key="idx">
-      <div>&bull;
-        <span x-show="o._loading || o._none" x-text="o.title"></span>
+      <div class="online-row">
+        <span x-show="o._loading" class="spinner-sm" aria-hidden="true"></span>
+        <span x-show="o._loading || o._none" x-text="o.title" class="muted"></span>
         <a x-show="!o._loading && !o._none" :href="o.url" target="_blank" x-text="o.title"></a>
-        <button class="btn small" x-show="!o._loading && !o._none" @click="addOnline(o)">Add as new group</button>
+        <button class="btn small" x-show="!o._loading && !o._none" @click="addOnline(o)"
+                :disabled="addBusy" x-text="addBusy ? 'Adding…' : '+ Add as new group'"></button>
       </div>
     </template>
   </div>

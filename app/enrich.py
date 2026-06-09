@@ -18,6 +18,9 @@ from .normalize import normalize
 log = get_logger("ksorter.enrich")
 
 _WIKI = "https://en.wikipedia.org/w/api.php"
+# Wikipedia's API policy requires a descriptive User-Agent with a contact URL;
+# a generic one is rejected with HTTP 403.
+_UA = "K-Sorter/1.0 (https://github.com/AnotherAsian123/K-Sorter; self-hosted k-pop sorter)"
 
 
 def search_group(name: str) -> list[dict]:
@@ -26,7 +29,11 @@ def search_group(name: str) -> list[dict]:
         resp = httpx.get(_WIKI, params={
             "action": "query", "list": "search", "format": "json",
             "srlimit": 5, "srsearch": f"{name} kpop group",
-        }, timeout=20, headers={"User-Agent": "K-Sorter/1.0 (self-hosted)"})
+        }, timeout=20, headers={
+            "User-Agent": _UA,
+            "Accept": "application/json",
+            "Api-User-Agent": _UA,
+        })
         resp.raise_for_status()
         results = resp.json().get("query", {}).get("search", [])
     except (httpx.HTTPError, ValueError) as exc:

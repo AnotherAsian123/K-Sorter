@@ -90,7 +90,7 @@ document.addEventListener("alpine:init", () => {
     members: memberCands || [],
     groupId: presetGroupId || ((groupCands && groupCands[0]) ? groupCands[0].id : ""),
     memberId: "",
-    q: "", online: [], busy: false, newMember: "",
+    q: "", online: [], busy: false, lookupBusy: false, addBusy: false, newMember: "",
     init() { if (this.groupId && !this.members.length) this.loadMembers(); },
     async searchGroups() {
       if (!this.q.trim()) return;
@@ -131,16 +131,31 @@ document.addEventListener("alpine:init", () => {
     async skip() { await swapStatus("/skip", { item_id: this.id }); },
     async lookup() {
       const term = this.q.trim();
-      if (!term) { alert("Type the group's name in the search box first, then look it up."); return; }
-      this.online = [{ title: "Searching…", url: "#", _loading: true }];
-      const r = await postForm("/enrich/search", { name: term });
-      this.online = await r.json();
-      if (!this.online.length) this.online = [{ title: "No results — try a different spelling.", url: "#", _none: true }];
+      if (!term) {
+        // Inline guidance instead of a silent alert; focus the search box.
+        this.online = [{ title: "Type the group's name in the Search box above, then click Look up online.", url: "#", _none: true }];
+        this.$nextTick(() => { const i = this.$el.querySelector('input[x-model="q"]'); if (i) i.focus(); });
+        return;
+      }
+      this.lookupBusy = true;
+      this.online = [{ title: "Searching the web for “" + term + "”…", url: "#", _loading: true }];
+      try {
+        const r = await postForm("/enrich/search", { name: term });
+        const list = await r.json();
+        this.online = list.length ? list
+          : [{ title: "No results — try a different spelling or the Korean name.", url: "#", _none: true }];
+      } catch (e) {
+        this.online = [{ title: "Lookup failed — the server may have no internet access (see the log file).", url: "#", _none: true }];
+      } finally {
+        this.lookupBusy = false;
+      }
     },
     async addOnline(cand) {
-      if (cand._loading || cand._none) return;
+      if (cand._loading || cand._none || this.addBusy) return;
+      this.addBusy = true;
       const r = await postForm("/enrich/add", { name: cand.title });
       const j = await r.json();
+      this.addBusy = false;
       if (j.ok) {
         this.groups = [{ id: j.group_id, name: cand.title, name_ko: "" }, ...this.groups];
         this.groupId = j.group_id;

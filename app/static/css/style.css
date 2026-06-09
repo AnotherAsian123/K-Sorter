@@ -124,6 +124,15 @@ input:focus, select:focus { outline: none; border-color: var(--sage);
   align-items: center; justify-content: center; font-size: .8rem; font-weight: 800; color: #fff; }
 .done-dot.ok { background: var(--sage); }
 .done-dot.err { background: #a4552e; }
+.spinner-sm { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid rgba(97,137,133,.25); border-top-color: var(--sage);
+  display: inline-block; animation: spin .8s linear infinite; }
+
+/* Online lookup results */
+.online-box { border: 1px dashed var(--panel-border); border-radius: 10px; padding: 8px 12px;
+  background: rgba(150,187,187,.1); }
+.online-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: .86rem; }
+.online-row + .online-row { border-top: 1px dashed var(--panel-border); }
 
 .item { border: 1px solid var(--panel-border); border-radius: 14px; padding: 14px;
   margin-bottom: 12px; background: rgba(255,255,255,.35); animation: settle .4s ease both; }
