@@ -174,6 +174,21 @@ table.moves tr.undone td { opacity: .5; text-decoration: line-through; }
 .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem;
   background: rgba(97,137,133,.22); color: var(--text); }
 
+/* Database manager */
+.manage-grid { display: grid; grid-template-columns: 360px 1fr; gap: 20px; align-items: start; }
+@media (max-width: 760px) { .manage-grid { grid-template-columns: 1fr; } }
+.glist { display: flex; flex-direction: column; gap: 4px; }
+.grow { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: rgba(255,255,255,.3); border: 1px solid var(--panel-border);
+  border-radius: 10px; padding: 9px 12px; cursor: pointer; color: var(--text);
+  font-size: .9rem; transition: background .15s, transform .1s; }
+[data-theme="dark"] .grow { background: rgba(0,0,0,.15); }
+.grow:hover { background: rgba(150,187,187,.25); transform: translateX(2px); }
+.grow .gname { font-weight: 600; }
+.grow .gko { font-size: .8rem; }
+.gdetail .mrow { padding: 10px 12px; }
+.mrow .controls { gap: 6px; flex-wrap: wrap; }
+
 .muted { color: var(--muted); font-size: .85rem; }
 .toggle { cursor: pointer; background: none; border: 1px solid var(--panel-border);
   color: var(--text); border-radius: 999px; padding: 7px 12px; font-size: .8rem; }

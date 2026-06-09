@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import database as db
-from . import enrich, paths, seed
+from . import enrich, manage, paths, seed
 from .config import settings
 from .engine import get_batch_moves, get_naming, list_batches, set_naming, undo_batch
 from .jobs import manager
@@ -206,6 +206,93 @@ async def undo(batch_id: str = Form(...)):
 async def save_settings(language: str = Form("en"), template: str = Form("nested")):
     set_naming(language, template)
     return JSONResponse({"ok": True})
+
+
+# ---- database manager (advanced) ------------------------------------------
+def _group_detail(request: Request, gid: str | None, refresh: bool = False):
+    data = manage.get_group(gid) if gid else None
+    headers = {"HX-Trigger": "ksRefresh"} if refresh else None
+    return templates.TemplateResponse(request, "_group_detail.html",
+                                      {"request": request, "data": data}, headers=headers)
+
+
+@app.get("/manage", response_class=HTMLResponse)
+async def manage_page(request: Request):
+    return templates.TemplateResponse(request, "manage.html", {
+        "request": request, "counts": db.counts()})
+
+
+@app.get("/db/groups", response_class=HTMLResponse)
+async def db_groups(request: Request, q: str = ""):
+    return templates.TemplateResponse(request, "_group_list.html", {
+        "request": request, "groups": manage.list_groups(q), "q": q})
+
+
+@app.get("/db/group/{gid}", response_class=HTMLResponse)
+async def db_group(request: Request, gid: str):
+    return _group_detail(request, gid)
+
+
+@app.post("/db/group/add", response_class=HTMLResponse)
+async def db_group_add(request: Request, name: str = Form(...),
+                       name_ko: str = Form(""), alias: str = Form("")):
+    if not name.strip():
+        return _group_detail(request, None)
+    aliases = [a.strip() for a in alias.split(",") if a.strip()]
+    gid = enrich.add_confirmed_group(name.strip(), name_ko.strip() or None, aliases)
+    return _group_detail(request, gid, refresh=True)
+
+
+@app.post("/db/group/{gid}/rename", response_class=HTMLResponse)
+async def db_group_rename(request: Request, gid: str, name: str = Form(...),
+                          name_ko: str = Form("")):
+    manage.rename_group(gid, name, name_ko)
+    return _group_detail(request, gid, refresh=True)
+
+
+@app.post("/db/group/{gid}/alias", response_class=HTMLResponse)
+async def db_group_alias(request: Request, gid: str, alias: str = Form(...)):
+    manage.add_group_alias(gid, alias)
+    return _group_detail(request, gid)
+
+
+@app.post("/db/group/{gid}/active", response_class=HTMLResponse)
+async def db_group_active(request: Request, gid: str, active: str = Form("1")):
+    manage.set_group_active(gid, active == "1")
+    return _group_detail(request, gid, refresh=True)
+
+
+@app.post("/db/group/{gid}/delete", response_class=HTMLResponse)
+async def db_group_delete(request: Request, gid: str):
+    manage.delete_group(gid)
+    return _group_detail(request, None, refresh=True)
+
+
+@app.post("/db/group/{gid}/member/add", response_class=HTMLResponse)
+async def db_member_add(request: Request, gid: str, name: str = Form(...),
+                        name_ko: str = Form("")):
+    if name.strip():
+        await asyncio.to_thread(enrich.add_member, gid, name.strip(), name_ko.strip() or None)
+    return _group_detail(request, gid, refresh=True)
+
+
+@app.post("/db/group/{gid}/member/{mid}/rename", response_class=HTMLResponse)
+async def db_member_rename(request: Request, gid: str, mid: str,
+                           name: str = Form(...), name_ko: str = Form("")):
+    manage.rename_member(mid, name, name_ko)
+    return _group_detail(request, gid)
+
+
+@app.post("/db/group/{gid}/member/{mid}/current", response_class=HTMLResponse)
+async def db_member_current(request: Request, gid: str, mid: str, current: str = Form("1")):
+    manage.set_member_current(gid, mid, current == "1")
+    return _group_detail(request, gid)
+
+
+@app.post("/db/group/{gid}/member/{mid}/remove", response_class=HTMLResponse)
+async def db_member_remove(request: Request, gid: str, mid: str):
+    manage.remove_member(gid, mid)
+    return _group_detail(request, gid, refresh=True)
 
 
 @app.get("/healthz")

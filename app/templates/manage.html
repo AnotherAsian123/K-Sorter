@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <h2>Database Manager <span class="chip manual">advanced</span></h2>
+  <p class="muted">Browse and edit groups &amp; members. Changes save immediately and
+    are used for sorting right away. <a href="/">&larr; back to sorting</a></p>
+  <div class="stats">
+    <div class="stat"><div class="n">{{ counts.groups }}</div><div class="l">Groups</div></div>
+    <div class="stat"><div class="n">{{ counts.members }}</div><div class="l">Members</div></div>
+    <div class="stat"><div class="n">{{ counts.aliases }}</div><div class="l">Aliases</div></div>
+  </div>
+</div>
+
+<div class="manage-grid">
+  <div class="card">
+    <h2>Groups</h2>
+    <input id="group-search" type="text" name="q" placeholder="Search groups&hellip;"
+           hx-get="/db/groups" hx-target="#group-list" hx-trigger="keyup changed delay:300ms">
+    <div id="group-list" hx-get="/db/groups"
+         hx-trigger="load, ksRefresh from:body" hx-include="#group-search"
+         style="margin-top:10px; max-height:60vh; overflow:auto"></div>
+
+    <details style="margin-top:14px">
+      <summary class="btn teal small" style="display:inline-block">+ Add a new group</summary>
+      <form hx-post="/db/group/add" hx-target="#group-detail" hx-swap="innerHTML" style="margin-top:10px">
+        <input type="text" name="name" placeholder="Group name (e.g. ALLDAY PROJECT)" required>
+        <input type="text" name="name_ko" placeholder="Korean name (optional)">
+        <input type="text" name="alias" placeholder="Nicknames, comma-separated (e.g. ADP)">
+        <button class="btn small" type="submit" style="margin-top:8px">Create group</button>
+      </form>
+    </details>
+  </div>
+
+  <div class="card">
+    <div id="group-detail">
+      <p class="muted">Select a group on the left to edit it &mdash; or add a new one.</p>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

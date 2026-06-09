@@ -1,0 +1,63 @@
+{% if not data %}
+<p class="muted">Select a group on the left to edit it &mdash; or add a new one.</p>
+{% else %}
+{% set g = data.group %}
+<div class="gdetail">
+  <h2 style="margin-bottom:6px">Edit group</h2>
+
+  <form hx-post="/db/group/{{ g.id }}/rename" hx-target="#group-detail" hx-swap="innerHTML" class="row">
+    <input type="text" name="name" value="{{ g.name }}" required>
+    <input type="text" name="name_ko" value="{{ g.name_ko or '' }}" placeholder="Korean name">
+    <button class="btn small" type="submit">Save name</button>
+  </form>
+
+  <div class="meta" style="margin-top:10px">
+    Aliases / nicknames:
+    {% for a in data.aliases %}<span class="tag">{{ a }}</span> {% endfor %}
+    {% if not data.aliases %}<span class="muted">none</span>{% endif %}
+  </div>
+  <form hx-post="/db/group/{{ g.id }}/alias" hx-target="#group-detail" hx-swap="innerHTML" class="controls" style="margin-top:6px">
+    <input type="text" name="alias" placeholder="Add nickname / alias (e.g. ADP)" required>
+    <button class="btn small" type="submit">+ Alias</button>
+  </form>
+
+  <div class="controls" style="margin-top:12px">
+    <form hx-post="/db/group/{{ g.id }}/active" hx-target="#group-detail" hx-swap="innerHTML" style="display:inline">
+      <input type="hidden" name="active" value="{{ 0 if g.is_active else 1 }}">
+      <button class="btn secondary small">{{ 'Mark disbanded' if g.is_active else 'Mark active' }}</button>
+    </form>
+    <form hx-post="/db/group/{{ g.id }}/delete" hx-target="#group-detail" hx-swap="innerHTML" style="display:inline"
+          hx-confirm="Delete {{ g.name }} and its member links? (Seed groups come back on the next Update Database.)">
+      <button class="btn clay small">Delete group</button>
+    </form>
+  </div>
+
+  <h2 style="margin:18px 0 8px">Members <span class="chip auto">{{ data.members|length }}</span></h2>
+  {% for m in data.members %}
+  <div class="item mrow">
+    <form hx-post="/db/group/{{ g.id }}/member/{{ m.id }}/rename" hx-target="#group-detail" hx-swap="innerHTML" class="controls">
+      <input type="text" name="name" value="{{ m.stage_name }}">
+      <input type="text" name="name_ko" value="{{ m.stage_name_ko or '' }}" placeholder="Korean" style="max-width:120px">
+      <button class="btn small" type="submit">Save</button>
+    </form>
+    <div class="controls" style="margin-top:6px">
+      {% if m.is_current %}<span class="chip auto">current</span>{% else %}<span class="chip manual">former</span>{% endif %}
+      <span class="spacer"></span>
+      <button class="btn secondary small"
+              hx-post="/db/group/{{ g.id }}/member/{{ m.id }}/current"
+              hx-vals='{"current": "{{ 0 if m.is_current else 1 }}"}'
+              hx-target="#group-detail" hx-swap="innerHTML">{{ 'Mark former' if m.is_current else 'Mark current' }}</button>
+      <button class="btn clay small"
+              hx-post="/db/group/{{ g.id }}/member/{{ m.id }}/remove" hx-target="#group-detail" hx-swap="innerHTML"
+              hx-confirm="Remove {{ m.stage_name }} from {{ g.name }}?">Remove</button>
+    </div>
+  </div>
+  {% endfor %}
+
+  <form hx-post="/db/group/{{ g.id }}/member/add" hx-target="#group-detail" hx-swap="innerHTML" class="controls" style="margin-top:10px">
+    <input type="text" name="name" placeholder="New member name" required>
+    <input type="text" name="name_ko" placeholder="Korean (optional)" style="max-width:120px">
+    <button class="btn teal small" type="submit">+ Add member</button>
+  </form>
+</div>
+{% endif %}

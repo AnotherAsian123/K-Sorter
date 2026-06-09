@@ -1,0 +1,15 @@
+{% if groups %}
+<div class="glist">
+  {% for g in groups %}
+  <button class="grow" hx-get="/db/group/{{ g.id }}" hx-target="#group-detail" hx-swap="innerHTML">
+    <span class="gname">{{ g.name }}</span>
+    {% if g.name_ko %}<span class="muted gko">{{ g.name_ko }}</span>{% endif %}
+    <span class="spacer"></span>
+    {% if not g.is_active %}<span class="chip manual">inactive</span>{% endif %}
+    <span class="tag" title="members">{{ g.nmem }}</span>
+  </button>
+  {% endfor %}
+</div>
+{% else %}
+<p class="muted">No groups found{% if q %} for &ldquo;{{ q }}&rdquo;{% endif %}.</p>
+{% endif %}
