@@ -53,20 +53,15 @@ class MoveResult:
     reason: str = ""
 
 
-def safe_move(src: Path, dest: Path, verify_checksum: bool = False) -> MoveResult:
-    src, dest = Path(src), Path(dest)
-    if not src.exists():
-        return MoveResult("error", reason="source disappeared")
-    if dest.exists():
-        log.info("SKIP collision: %s already exists (source kept: %s)", dest, src)
-        return MoveResult("skipped", dest=str(dest), reason="destination exists")
-
+def _relocate(src: Path, dest: Path, verify_checksum: bool) -> MoveResult:
+    """Move src -> dest with the fastest safe method. Assumes dest does not exist
+    (caller checks collisions). Used by both safe_move and undo so they share the
+    same cross-device (EXDEV) handling."""
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     # 1) Atomic rename — instant when src & dest share a mount point.
     try:
         os.replace(src, dest)
-        log.info("MOVE rename: %s -> %s", src, dest)
         return MoveResult("moved", method="rename", dest=str(dest))
     except OSError as exc:
         if exc.errno != errno.EXDEV:
@@ -75,7 +70,7 @@ def safe_move(src: Path, dest: Path, verify_checksum: bool = False) -> MoveResul
             log.warning("rename failed (%s); trying link/copy: %s -> %s", exc, src, dest)
 
     # 2) Hardlink + unlink — instant, no copy, for separate bind mounts on the
-    #    same underlying filesystem (typical Unraid /watch -> /watch_dest).
+    #    same underlying filesystem (typical Unraid /watch <-> /watch_dest).
     try:
         os.link(src, dest)
     except OSError:
@@ -85,15 +80,13 @@ def safe_move(src: Path, dest: Path, verify_checksum: bool = False) -> MoveResul
             src.unlink()
         except OSError:
             log.warning("hardlinked but could not remove source: %s", src)
-        log.info("MOVE hardlink (cross-mount, same fs): %s -> %s", src, dest)
         return MoveResult("moved", method="hardlink", dest=str(dest))
 
     # 3) Cross-filesystem: copy -> verify -> swap -> remove source.
     tmp = dest.with_name(dest.name + ".ksort-tmp")
     try:
         shutil.copyfile(src, tmp)
-        src_size = src.stat().st_size
-        if tmp.stat().st_size != src_size:
+        if tmp.stat().st_size != src.stat().st_size:
             tmp.unlink(missing_ok=True)
             return MoveResult("error", reason="size mismatch after copy")
         if verify_checksum and _sha256(tmp) != _sha256(src):
@@ -101,13 +94,27 @@ def safe_move(src: Path, dest: Path, verify_checksum: bool = False) -> MoveResul
             return MoveResult("error", reason="checksum mismatch after copy")
         os.replace(tmp, dest)
         src.unlink()
-        log.info("MOVE copy%s: %s -> %s",
-                 "+sha256" if verify_checksum else "+size", src, dest)
-        return MoveResult("moved", method="copy", dest=str(dest))
+        return MoveResult("moved", method="copy" + ("+sha256" if verify_checksum else ""),
+                          dest=str(dest))
     except OSError as exc:
         Path(tmp).unlink(missing_ok=True)
-        log.exception("MOVE failed: %s -> %s", src, dest)
         return MoveResult("error", reason=str(exc))
+
+
+def safe_move(src: Path, dest: Path, verify_checksum: bool = False) -> MoveResult:
+    src, dest = Path(src), Path(dest)
+    if not src.exists():
+        return MoveResult("error", reason="source disappeared")
+    if dest.exists():
+        log.info("SKIP collision: %s already exists (source kept: %s)", dest, src)
+        return MoveResult("skipped", dest=str(dest), reason="destination exists")
+
+    result = _relocate(src, dest, verify_checksum)
+    if result.status == "moved":
+        log.info("MOVE %s: %s -> %s", result.method, src, dest)
+    else:
+        log.error("MOVE failed (%s): %s -> %s", result.reason, src, dest)
+    return result
 
 
 def replicate(src: Path, dest: Path) -> MoveResult:
@@ -140,17 +147,19 @@ def undo_one(source: str, dest: str, action: str) -> bool:
             # Replica left the original in place; just remove the copy/link.
             dest_p.unlink(missing_ok=True)
             return True
-        # action == 'move': put it back where it came from.
+        # action == 'move': put it back where it came from (EXDEV-safe).
         if not dest_p.exists():
             log.warning("UNDO: dest missing, cannot restore %s", dest)
             return False
         if src_p.exists():
             log.warning("UNDO: original path occupied, not overwriting %s", source)
             return False
-        src_p.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(dest_p, src_p)
-        log.info("UNDO: %s -> %s", dest, source)
-        return True
+        result = _relocate(dest_p, src_p, verify_checksum=False)
+        if result.status == "moved":
+            log.info("UNDO %s: %s -> %s", result.method, dest, source)
+            return True
+        log.error("UNDO failed (%s): %s -> %s", result.reason, dest, source)
+        return False
     except OSError:
         log.exception("UNDO failed for %s -> %s", dest, source)
         return False

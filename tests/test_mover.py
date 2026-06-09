@@ -41,6 +41,22 @@ def test_cross_mount_falls_back_to_hardlink(tmp_path, monkeypatch):
     assert dest.read_bytes() == b"y" * 2048
 
 
+def test_undo_survives_cross_device(tmp_path, monkeypatch):
+    # Regression: undo across separate bind mounts must not fail with EXDEV.
+    src = tmp_path / "orig" / "v.mp4"
+    dest = tmp_path / "sorted" / "Group" / "v.mp4"
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"data" * 256)
+    mover.safe_move(src, dest)
+    assert dest.exists() and not src.exists()
+
+    monkeypatch.setattr(mover.os, "replace", _exdev_when_moving(dest))
+    ok = mover.undo_one(str(src), str(dest), "move")
+    assert ok is True
+    assert src.exists() and not dest.exists()
+    assert src.read_bytes() == b"data" * 256
+
+
 def test_truly_different_fs_falls_back_to_copy(tmp_path, monkeypatch):
     # Both rename AND hardlink fail with EXDEV -> safe copy+verify+delete.
     src = tmp_path / "c.mp4"; src.write_bytes(b"z" * 4096)
