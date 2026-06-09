@@ -118,6 +118,12 @@ async def resolve(request: Request, item_id: str = Form(...),
     return _status_response(request, error=None if res["ok"] else res.get("error"))
 
 
+@app.post("/resolve-collab", response_class=HTMLResponse)
+async def resolve_collab(request: Request, item_id: str = Form(...), action: str = Form(...)):
+    res = manager.resolve_collab(item_id, action)
+    return _status_response(request, error=None if res["ok"] else res.get("error"))
+
+
 @app.post("/skip", response_class=HTMLResponse)
 async def skip(request: Request, item_id: str = Form(...)):
     manager.skip(item_id)

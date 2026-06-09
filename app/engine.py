@@ -77,6 +77,7 @@ class PlanItem:
     replica_dests: list[str] = field(default_factory=list)
     group_candidates: list[dict] = field(default_factory=list)
     member_candidates: list[dict] = field(default_factory=list)
+    collab_groups: list[dict] = field(default_factory=list)   # groups in a collab
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -86,7 +87,7 @@ def _route(res: MatchResult) -> str:
     if res.group is None:
         return "manual"
     if res.is_collab:
-        return "auto"
+        return "confirm"   # multi-group videos are decided by the user
     if res.ambiguous or (res.is_solo and res.member is None):
         return "confirm"
     if res.confidence >= settings.auto_threshold:
@@ -137,6 +138,11 @@ def build_plan_item(vf: VideoFile, dest_root: Path) -> PlanItem:
 
     if res.is_collab:
         item.group_name = " + ".join(g.name for g in res.groups)
+        item.collab_groups = [{"id": g.id, "name": g.name} for g in res.groups]
+        item.help = ("Multiple groups detected — you decide: file into Special "
+                     "Stages and copy to every group, Special Stages only, or just "
+                     "one group.")
+        # Pre-compute the "replicate everywhere" destinations (used if chosen).
         item.primary_dest = str(dest_root / SPECIAL_STAGES / vf.path.name)
         item.replica_dests = [
             str(dest_root / _name(g, lang) / GROUP_SUBFOLDER / vf.path.name)

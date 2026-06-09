@@ -44,6 +44,33 @@
 </div>
 {% endmacro %}
 
+{# Multi-group (collab) decision: replicate everywhere, Special Stages only, or
+   just one group. #}
+{% macro collab_resolver(it) %}
+<div class="item">
+  <div class="fname">{{ it.filename }}</div>
+  <div class="why">{{ it.help }}</div>
+  <div class="meta">Detected groups:
+    {% for g in it.collab_groups %}<strong>{{ g.name }}</strong>{% if not loop.last %} + {% endif %}{% endfor %}
+  </div>
+  <div class="controls" style="margin-top:8px">
+    <button class="btn small" hx-post="/resolve-collab" hx-target="#status" hx-swap="innerHTML"
+            hx-vals='{"item_id": "{{ it.id }}", "action": "replicate"}'>
+      &#10003; Special Stages + all groups</button>
+    <button class="btn secondary small" hx-post="/resolve-collab" hx-target="#status" hx-swap="innerHTML"
+            hx-vals='{"item_id": "{{ it.id }}", "action": "special"}'>
+      Special Stages only</button>
+    {% for g in it.collab_groups %}
+    <button class="btn teal small" hx-post="/resolve-collab" hx-target="#status" hx-swap="innerHTML"
+            hx-vals='{"item_id": "{{ it.id }}", "action": "group:{{ g.id }}"}'>
+      Only {{ g.name }}</button>
+    {% endfor %}
+    <button class="btn secondary small" hx-post="/skip" hx-target="#status" hx-swap="innerHTML"
+            hx-vals='{"item_id": "{{ it.id }}"}'>Skip</button>
+  </div>
+</div>
+{% endmacro %}
+
 {% if error %}<div class="banner err">{{ error }} &mdash; see the log file for full details.</div>{% endif %}
 
 {% if db_empty and not running %}
@@ -99,7 +126,7 @@
   <h2>A quick yes-or-yes? <span class="chip confirm">{{ state.review|length }}</span></h2>
   <p class="muted">Found a likely match but want your nod before moving these. If the
     suggestion is wrong, search for the right group or look it up online &mdash; then Confirm.</p>
-  {% for it in state.review %}{{ resolver(it) }}{% endfor %}
+  {% for it in state.review %}{% if it.is_collab %}{{ collab_resolver(it) }}{% else %}{{ resolver(it) }}{% endif %}{% endfor %}
 </div>
 {% endif %}
 

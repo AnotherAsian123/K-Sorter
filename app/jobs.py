@@ -192,6 +192,48 @@ class JobManager:
             return {"ok": True, "dest": result.get("dest")}
         return {"ok": False, "error": result.get("reason", result["status"])}
 
+    def resolve_collab(self, item_id: str, action: str) -> dict:
+        """Apply a user's decision for a multi-group video.
+        action: 'replicate' | 'special' | 'group:<group_id>'."""
+        st = self.state
+        queue = idx = None
+        for lst in (st.review, st.manual):
+            j = next((i for i, it in enumerate(lst) if it["id"] == item_id), None)
+            if j is not None:
+                queue, idx = lst, j
+                break
+        if queue is None:
+            return {"ok": False, "error": "Item not found (already handled?)."}
+        item = engine.PlanItem(**queue[idx])
+        dest_root = Path(st.dest)
+        lang, _template = engine.get_naming()
+
+        if action == "replicate":
+            item.is_collab = True  # primary_dest + replica_dests already set
+        elif action == "special":
+            item.is_collab = False
+            item.replica_dests = []
+            item.primary_dest = str(dest_root / engine.SPECIAL_STAGES / item.filename)
+        elif action.startswith("group:"):
+            from .matcher import get_index
+            g = get_index().groups.get(action.split(":", 1)[1])
+            if not g:
+                return {"ok": False, "error": "Unknown group."}
+            item.is_collab = False
+            item.replica_dests = []
+            item.primary_dest = str(
+                dest_root / engine._name(g, lang) / engine.GROUP_SUBFOLDER / item.filename)
+            item.group_id, item.group_name = g.id, g.name
+        else:
+            return {"ok": False, "error": "Unknown action."}
+
+        result = engine.apply_item(item, st.batch_id)
+        if result["status"] == "moved":
+            st.moved += 1
+            queue.pop(idx)
+            return {"ok": True, "dest": result.get("dest")}
+        return {"ok": False, "error": result.get("reason", result["status"])}
+
     def skip(self, item_id: str) -> dict:
         st = self.state
         st.review = [it for it in st.review if it["id"] != item_id]

@@ -78,19 +78,52 @@ def test_history_records_labels(tmp_path):
     assert moves[0]["member_name"] == "Momo"
 
 
-def test_collab_replicates(tmp_path):
+def test_collab_goes_to_review_with_options(tmp_path):
+    # Multi-group videos must NOT auto-apply — they go to review with choices.
     src = tmp_path / "s2"; dst = tmp_path / "d2"
     src.mkdir(); dst.mkdir()
     f = _make(src, "TWICE x ITZY special stage.mp4")
     vf = VideoFile(path=f, size=f.stat().st_size, stem=f.stem)
     item = engine.build_plan_item(vf, dst)
-    assert item.is_collab and item.status == "auto"
-    res = engine.apply_item(item, "collab-batch")
-    assert res["status"] == "moved"
+    assert item.is_collab and item.status == "confirm"
+    assert {g["name"] for g in item.collab_groups} == {"TWICE", "ITZY"}
+    assert not (dst / "_Special Stages" / f.name).exists()  # nothing moved yet
+
+
+def _collab_item(tmp_path, name="TWICE x ITZY stage.mp4"):
+    from app.jobs import manager
+    src = tmp_path; src.mkdir(parents=True, exist_ok=True)
+    dst = tmp_path / "out"; dst.mkdir(exist_ok=True)
+    f = _make(src, name)
+    item = engine.build_plan_item(VideoFile(path=f, size=f.stat().st_size, stem=f.stem), dst)
+    manager.state.review = [item.as_dict()]; manager.state.manual = []
+    manager.state.dest = str(dst); manager.state.batch_id = "cb"
+    return manager, item, f, dst
+
+
+def test_collab_resolve_replicate(tmp_path):
+    mgr, item, f, dst = _collab_item(tmp_path / "rep")
+    assert mgr.resolve_collab(item.id, "replicate")["ok"]
     assert (dst / "_Special Stages" / f.name).exists()
-    # Replicated into both groups' Group/ folders.
     assert (dst / "TWICE" / "Group" / f.name).exists()
     assert (dst / "ITZY" / "Group" / f.name).exists()
+
+
+def test_collab_resolve_special_only(tmp_path):
+    mgr, item, f, dst = _collab_item(tmp_path / "sp")
+    assert mgr.resolve_collab(item.id, "special")["ok"]
+    assert (dst / "_Special Stages" / f.name).exists()
+    assert not (dst / "TWICE" / "Group" / f.name).exists()
+    assert not (dst / "ITZY" / "Group" / f.name).exists()
+
+
+def test_collab_resolve_single_group(tmp_path):
+    mgr, item, f, dst = _collab_item(tmp_path / "one")
+    gid = next(g["id"] for g in item.collab_groups if g["name"] == "ITZY")
+    assert mgr.resolve_collab(item.id, f"group:{gid}")["ok"]
+    assert (dst / "ITZY" / "Group" / f.name).exists()
+    assert not (dst / "_Special Stages" / f.name).exists()
+    assert not (dst / "TWICE" / "Group" / f.name).exists()
 
 
 def test_resolve_from_manual_queue(tmp_path):
