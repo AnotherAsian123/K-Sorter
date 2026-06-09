@@ -60,3 +60,23 @@ def add_confirmed_group(name: str, name_ko: str | None = None,
     reload_index()
     log.info("Added user-confirmed group %s (%s)", name, gid)
     return gid
+
+
+def add_member(group_id: str, name: str, name_ko: str | None = None,
+               is_current: bool = True) -> str | None:
+    """Add a member to an existing group (for rosters the seed data missed, e.g.
+    new line-up additions). Persists + aliases so it matches automatically next time."""
+    if not db.query_one("SELECT 1 FROM groups WHERE id = ?", (group_id,)):
+        return None
+    mid = "user-" + uuid.uuid4().hex[:8]
+    db.execute("INSERT INTO members(id, stage_name, stage_name_ko) VALUES(?,?,?)",
+               (mid, name, name_ko))
+    db.execute("INSERT OR IGNORE INTO group_members(group_id, member_id, is_current)"
+               " VALUES(?,?,?)", (group_id, mid, 1 if is_current else 0))
+    for raw in (name, name_ko):
+        if raw and raw.strip():
+            db.execute("INSERT OR IGNORE INTO aliases(entity_type,entity_id,alias,alias_raw)"
+                       " VALUES('member',?,?,?)", (mid, normalize(raw), raw))
+    reload_index()
+    log.info("Added member %s to group %s (%s)", name, group_id, mid)
+    return mid

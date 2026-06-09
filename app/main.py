@@ -141,14 +141,29 @@ async def groups_search(q: str = ""):
 
 @app.get("/members/search")
 async def members_search(group_id: str, q: str = ""):
-    idx = get_index()
-    member_ids = set(idx.group_to_members.get(group_id, []))
-    out = []
-    for mid in member_ids:
-        m = idx.members.get(mid)
-        if m and (not q or q.strip().lower() in (m.name or "").lower()):
-            out.append({"id": m.id, "name": m.name, "name_ko": m.name_ko})
-    return JSONResponse(sorted(out, key=lambda x: x["name"]))
+    # Query the DB directly so we get the is_current flag (current members first,
+    # former members labelled, missing ones can be added).
+    rows = db.query(
+        "SELECT m.id, m.stage_name, m.stage_name_ko, gm.is_current "
+        "FROM group_members gm JOIN members m ON m.id = gm.member_id "
+        "WHERE gm.group_id = ? ORDER BY gm.is_current DESC, m.stage_name", (group_id,))
+    ql = q.strip().lower()
+    out = [{"id": r["id"], "name": r["stage_name"], "name_ko": r["stage_name_ko"],
+            "current": bool(r["is_current"])}
+           for r in rows if not ql or ql in (r["stage_name"] or "").lower()]
+    return JSONResponse(out)
+
+
+@app.post("/members/add")
+async def members_add(group_id: str = Form(...), name: str = Form(...),
+                      name_ko: str = Form("")):
+    if not group_id or not name.strip():
+        return JSONResponse({"ok": False, "error": "Pick a group and type a member name."})
+    mid = await asyncio.to_thread(enrich.add_member, group_id, name.strip(),
+                                  name_ko.strip() or None)
+    if not mid:
+        return JSONResponse({"ok": False, "error": "Unknown group."})
+    return JSONResponse({"ok": True, "member_id": mid, "name": name.strip()})
 
 
 # ---- live enrichment ------------------------------------------------------

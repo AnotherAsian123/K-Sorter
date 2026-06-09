@@ -107,8 +107,10 @@ def _roster_candidates(group_id: str, fuzzy: list[tuple[EntityRef, int]]) -> lis
         m = idx.members.get(mid)
         if m:
             out.append({"id": m.id, "name": m.name, "name_ko": m.name_ko,
-                        "score": scores.get(m.id, 0)})
-    out.sort(key=lambda c: (-c["score"], c["name"]))
+                        "score": scores.get(m.id, 0),
+                        "current": idx.gm_current.get((group_id, mid), True)})
+    # Best fuzzy guesses first, then current members, then former.
+    out.sort(key=lambda c: (-c["score"], not c["current"], c["name"]))
     return out
 
 

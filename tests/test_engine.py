@@ -112,6 +112,17 @@ def test_resolve_from_manual_queue(tmp_path):
     assert not manager.state.manual  # removed from the queue
 
 
+def test_add_missing_member(tmp_path):
+    # Seed data may miss new line-up additions; adding one should make it match.
+    from app import enrich
+    mid = enrich.add_member("twice", "Newbie")
+    assert mid
+    r = matcher.get_index().match("TWICE Newbie fancam")
+    assert r.group.id == "twice"
+    assert r.member and r.member.id == mid
+    assert r.confidence >= 90
+
+
 def test_unknown_goes_manual(tmp_path):
     src = tmp_path / "s3"; dst = tmp_path / "d3"
     src.mkdir(); dst.mkdir()

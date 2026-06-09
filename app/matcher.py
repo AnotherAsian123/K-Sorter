@@ -52,13 +52,15 @@ class MatchIndex:
         self.groups: dict[str, EntityRef] = {}
         self.members: dict[str, EntityRef] = {}
         self.group_to_members: dict[str, list[str]] = {}
+        self.gm_current: dict[tuple[str, str], bool] = {}
 
         for r in db.query("SELECT id, name, name_ko FROM groups"):
             self.groups[r["id"]] = EntityRef(r["id"], "group", r["name"], r["name_ko"])
         for r in db.query("SELECT id, stage_name, stage_name_ko FROM members"):
             self.members[r["id"]] = EntityRef(r["id"], "member", r["stage_name"], r["stage_name_ko"])
-        for r in db.query("SELECT group_id, member_id FROM group_members"):
+        for r in db.query("SELECT group_id, member_id, is_current FROM group_members"):
             self.group_to_members.setdefault(r["group_id"], []).append(r["member_id"])
+            self.gm_current[(r["group_id"], r["member_id"])] = bool(r["is_current"])
 
         # alias (normalized) -> list of entity ids, plus parallel lists for fuzzy.
         self.group_alias_to_ids: dict[str, list[str]] = {}

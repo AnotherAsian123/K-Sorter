@@ -90,7 +90,7 @@ document.addEventListener("alpine:init", () => {
     members: memberCands || [],
     groupId: presetGroupId || ((groupCands && groupCands[0]) ? groupCands[0].id : ""),
     memberId: "",
-    q: "", online: [], busy: false,
+    q: "", online: [], busy: false, newMember: "",
     init() { if (this.groupId && !this.members.length) this.loadMembers(); },
     async searchGroups() {
       if (!this.q.trim()) return;
@@ -114,6 +114,19 @@ document.addEventListener("alpine:init", () => {
         item_id: this.id, group_id: this.groupId,
         member_id: this.memberId, learn: "true",
       });
+    },
+    async addMember() {
+      const name = this.newMember.trim();
+      if (!this.groupId || !name) return;
+      const r = await postForm("/members/add", { group_id: this.groupId, name });
+      const j = await r.json();
+      if (j.ok) {
+        this.members = [{ id: j.member_id, name: j.name, name_ko: "", current: true }, ...this.members];
+        this.memberId = j.member_id;
+        this.newMember = "";
+      } else {
+        alert(j.error || "Could not add member.");
+      }
     },
     async skip() { await swapStatus("/skip", { item_id: this.id }); },
     async lookup() {

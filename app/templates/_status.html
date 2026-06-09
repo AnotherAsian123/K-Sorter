@@ -19,8 +19,12 @@
            @keyup.debounce.400ms="searchGroups()" @keydown.enter.prevent="searchGroups()">
     <select x-model="memberId" title="Member">
       <option value="">&mdash; group folder (no member) &mdash;</option>
-      <template x-for="m in members" :key="m.id"><option :value="m.id" x-text="m.name + (m.name_ko ? ' ('+m.name_ko+')' : '')"></option></template>
+      <template x-for="m in members" :key="m.id"><option :value="m.id" x-text="m.name + (m.name_ko ? ' ('+m.name_ko+')' : '') + (m.current === false ? ' (former)' : '')"></option></template>
     </select>
+    <input type="text" placeholder="+ add member&hellip;" x-model="newMember" x-show="groupId"
+           @keydown.enter.prevent="addMember()" style="max-width:150px"
+           title="Member missing? Add them to this group.">
+    <button class="btn teal small" @click="addMember()" x-show="groupId" :disabled="!newMember.trim()">+ Member</button>
     <button class="btn small" @click="confirm()" :disabled="!groupId">&#10003; Confirm</button>
     <button class="btn teal small" @click="lookup()">&#128270; Look up online</button>
     <button class="btn secondary small" @click="skip()">Skip</button>
