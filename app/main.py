@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import database as db
-from . import enrich, manage, paths, seed
+from . import engine, enrich, manage, paths, seed
 from .config import settings
 from .engine import get_batch_moves, get_naming, list_batches, set_naming, undo_batch
 from .jobs import manager
@@ -32,6 +32,9 @@ def _ensure_seed() -> None:
         if db.counts()["groups"] == 0:
             log.info("Empty database on startup — seeding from dataset.")
             seed.refresh_seed(force_download=False)
+        # Clean up any previously-learned junk aliases (common words / ids) that
+        # cause misidentification (e.g. false collabs).
+        engine.purge_polluted_aliases()
         reload_index()
     except Exception:  # noqa: BLE001
         log.exception("Startup seed failed; UI will offer 'Update Database'.")
@@ -293,6 +296,12 @@ async def db_member_current(request: Request, gid: str, mid: str, current: str =
 async def db_member_remove(request: Request, gid: str, mid: str):
     manage.remove_member(gid, mid)
     return _group_detail(request, gid, refresh=True)
+
+
+@app.post("/db/reset-learned")
+async def db_reset_learned():
+    n = engine.reset_learned_aliases()
+    return JSONResponse({"ok": True, "removed": n})
 
 
 @app.get("/healthz")

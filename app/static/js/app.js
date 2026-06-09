@@ -42,6 +42,20 @@ async function updateDb(btn) {
   btn.disabled = false;
 }
 
+async function resetLearned(btn) {
+  if (!confirm("Forget all learned aliases? Seed and manually-added data are kept.")) return;
+  btn.disabled = true;
+  const msg = document.getElementById("reset-msg");
+  try {
+    const r = await postForm("/db/reset-learned", {});
+    const j = await r.json();
+    msg.textContent = ` Forgot ${j.removed} learned alias(es).`;
+  } catch (e) {
+    msg.textContent = " Reset failed — see the log file.";
+  }
+  btn.disabled = false;
+}
+
 async function undoBatch(batchId, btn) {
   btn.disabled = true;
   btn.textContent = "Undoing…";

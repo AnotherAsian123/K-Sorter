@@ -17,7 +17,7 @@ from . import mover
 from .config import settings
 from .logging_setup import get_logger
 from .matcher import EntityRef, MatchResult, get_index, reload_index
-from .normalize import FILLER, normalize, tokens_for_match
+from .normalize import is_learnable_token, normalize, tokens_for_match
 from .scanner import VideoFile
 
 log = get_logger("ksorter")
@@ -287,12 +287,18 @@ def learn_correction(filename_stem: str, group_id: str,
                      member_id: str | None = None) -> None:
     """Teach K-Sorter from your fix: any unknown token in the filename becomes a
     new alias for the entity you chose, so it matches automatically next time."""
-    idx = get_index()
     tokens, _ = tokens_for_match(filename_stem)
     known = set()
     for r in db.query("SELECT alias FROM aliases"):
         known.update(r["alias"].split())
-    leftover = [t for t in tokens if t not in known and t not in FILLER and len(t) > 1]
+    # Only learn genuinely name-like, unknown tokens — never common title words,
+    # numbers or ids. And bail if there are too many candidates (a title dump),
+    # which would otherwise pollute the group with non-name aliases.
+    leftover = [t for t in tokens if t not in known and is_learnable_token(t)]
+    if not leftover or len(leftover) > 2:
+        if leftover:
+            log.info("Skipped learning (too ambiguous): %s", leftover)
+        return
 
     target_type = "member" if member_id else "group"
     target_id = member_id or group_id
@@ -303,7 +309,35 @@ def learn_correction(filename_stem: str, group_id: str,
         db.execute(
             "INSERT OR REPLACE INTO corrections(pattern,entity_type,entity_id,group_id)"
             " VALUES(?,?,?,?)", (normalize(tok), target_type, target_id, group_id))
-    if leftover:
-        log.info("Learned %d alias(es) for %s %s: %s",
-                 len(leftover), target_type, target_id, leftover)
+    log.info("Learned %d alias(es) for %s %s: %s",
+             len(leftover), target_type, target_id, leftover)
+    reload_index()
+
+
+def purge_polluted_aliases() -> int:
+    """Remove previously-learned aliases that are common words / numbers / ids
+    (these caused misidentification, e.g. false collabs). Only touches learned
+    aliases tracked in `corrections`; seed and user-added aliases are untouched."""
+    removed = 0
+    for r in db.query("SELECT pattern, entity_type, entity_id FROM corrections"):
+        if not is_learnable_token(r["pattern"]):
+            db.execute("DELETE FROM aliases WHERE entity_type=? AND entity_id=? AND alias=?",
+                       (r["entity_type"], r["entity_id"], r["pattern"]))
+            db.execute("DELETE FROM corrections WHERE pattern=?", (r["pattern"],))
+            removed += 1
+    if removed:
+        log.info("Purged %d polluted learned alias(es)", removed)
         reload_index()
+    return removed
+
+
+def reset_learned_aliases() -> int:
+    """Forget ALL learned aliases (full clean slate). Seed + user-added stay."""
+    rows = db.query("SELECT pattern, entity_type, entity_id FROM corrections")
+    for r in rows:
+        db.execute("DELETE FROM aliases WHERE entity_type=? AND entity_id=? AND alias=?",
+                   (r["entity_type"], r["entity_id"], r["pattern"]))
+    db.execute("DELETE FROM corrections")
+    reload_index()
+    log.info("Reset %d learned alias(es)", len(rows))
+    return len(rows)

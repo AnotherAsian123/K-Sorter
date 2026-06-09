@@ -9,7 +9,14 @@
     <div class="stat"><div class="n">{{ counts.groups }}</div><div class="l">Groups</div></div>
     <div class="stat"><div class="n">{{ counts.members }}</div><div class="l">Members</div></div>
     <div class="stat"><div class="n">{{ counts.aliases }}</div><div class="l">Aliases</div></div>
+    <div class="stat"><div class="n">{{ counts.corrections }}</div><div class="l">Learned</div></div>
   </div>
+  <p class="muted" style="margin-top:10px">
+    “Learned” are aliases K-Sorter picked up from your confirmations. If videos
+    are being misidentified, you can forget them all and start clean.
+  </p>
+  <button class="btn clay small" onclick="resetLearned(this)">↺ Reset learned aliases</button>
+  <span id="reset-msg" class="muted"></span>
 </div>
 
 <div class="manage-grid">
