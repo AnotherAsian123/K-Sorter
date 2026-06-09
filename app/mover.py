@@ -48,9 +48,42 @@ def _sha256(path: Path, chunk: int = 1024 * 1024) -> str:
 @dataclass
 class MoveResult:
     status: str          # 'moved' | 'skipped' | 'error'
-    method: str = ""     # 'rename' | 'hardlink' | 'copy'
+    method: str = ""     # 'rename' | 'hardlink' | 'copy' | 'dedupe'
     dest: str = ""
     reason: str = ""
+
+
+def _partial_hash(path: Path, edge: int = 1024 * 1024) -> str | None:
+    """Hash of the file's head + tail — enough to confirm two files are the same
+    without reading whole videos. None if unreadable (treated as 'not equal')."""
+    h = hashlib.sha256()
+    try:
+        size = path.stat().st_size
+        with open(path, "rb") as fh:
+            h.update(fh.read(edge))
+            if size > edge * 2:
+                fh.seek(-edge, 2)
+                h.update(fh.read(edge))
+    except OSError:
+        return None
+    return h.hexdigest()
+
+
+def _same_file(a: Path, b: Path) -> bool:
+    """True only if a and b are genuinely the same file (same inode, or same
+    size AND matching head/tail hash). Used to safely remove a redundant copy."""
+    try:
+        if os.path.samefile(a, b):
+            return True
+    except OSError:
+        pass
+    try:
+        if a.stat().st_size != b.stat().st_size:
+            return False
+    except OSError:
+        return False
+    pa = _partial_hash(a)
+    return pa is not None and pa == _partial_hash(b)
 
 
 def _relocate(src: Path, dest: Path, verify_checksum: bool) -> MoveResult:
@@ -106,8 +139,19 @@ def safe_move(src: Path, dest: Path, verify_checksum: bool = False) -> MoveResul
     if not src.exists():
         return MoveResult("error", reason="source disappeared")
     if dest.exists():
-        log.info("SKIP collision: %s already exists (source kept: %s)", dest, src)
-        return MoveResult("skipped", dest=str(dest), reason="destination exists")
+        # If the destination already holds the SAME file, the source is a
+        # redundant copy in the wrong place — remove it (the move is effectively
+        # already done). Different file with the same name -> never overwrite.
+        if _same_file(src, dest):
+            try:
+                src.unlink()
+            except OSError as exc:
+                log.error("DEDUPE: could not remove redundant source %s: %s", src, exc)
+                return MoveResult("error", reason=str(exc))
+            log.info("DEDUPE: identical file already at %s; removed redundant %s", dest, src)
+            return MoveResult("moved", method="dedupe", dest=str(dest))
+        log.info("SKIP collision: %s already exists, different file (source kept: %s)", dest, src)
+        return MoveResult("skipped", dest=str(dest), reason="destination exists (different file)")
 
     result = _relocate(src, dest, verify_checksum)
     if result.status == "moved":
@@ -147,6 +191,20 @@ def undo_one(source: str, dest: str, action: str) -> bool:
             # Replica left the original in place; just remove the copy/link.
             dest_p.unlink(missing_ok=True)
             return True
+        if action == "dedupe":
+            # We removed a redundant copy at `source`; the file still lives at
+            # `dest`. Restore that copy (hardlink/copy back, keep dest).
+            if src_p.exists():
+                return True
+            if not dest_p.exists():
+                log.warning("UNDO dedupe: file missing at %s", dest)
+                return False
+            res = replicate(dest_p, src_p)
+            if res.status == "moved":
+                log.info("UNDO dedupe (%s): restored %s", res.method, source)
+                return True
+            log.error("UNDO dedupe failed: %s", res.reason)
+            return False
         # action == 'move': put it back where it came from (EXDEV-safe).
         if not dest_p.exists():
             log.warning("UNDO: dest missing, cannot restore %s", dest)

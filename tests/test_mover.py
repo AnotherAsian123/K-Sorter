@@ -41,6 +41,30 @@ def test_cross_mount_falls_back_to_hardlink(tmp_path, monkeypatch):
     assert dest.read_bytes() == b"y" * 2048
 
 
+def test_dedupe_when_same_file_at_dest(tmp_path):
+    # The destination already holds an IDENTICAL copy -> remove the redundant
+    # source instead of skipping (so corrections actually take effect).
+    data = b"same-content" * 4096
+    src = tmp_path / "wrong" / "v.mp4"
+    dest = tmp_path / "right" / "v.mp4"
+    src.parent.mkdir(parents=True); dest.parent.mkdir(parents=True)
+    src.write_bytes(data); dest.write_bytes(data)
+    r = mover.safe_move(src, dest)
+    assert r.status == "moved" and r.method == "dedupe"
+    assert not src.exists() and dest.exists()
+
+
+def test_collision_different_file_is_skipped(tmp_path):
+    # Same name but DIFFERENT content -> never overwrite, keep the source.
+    src = tmp_path / "a" / "v.mp4"
+    dest = tmp_path / "b" / "v.mp4"
+    src.parent.mkdir(parents=True); dest.parent.mkdir(parents=True)
+    src.write_bytes(b"A" * 4096); dest.write_bytes(b"B" * 4096)
+    r = mover.safe_move(src, dest)
+    assert r.status == "skipped"
+    assert src.exists() and dest.read_bytes() == b"B" * 4096
+
+
 def test_undo_survives_cross_device(tmp_path, monkeypatch):
     # Regression: undo across separate bind mounts must not fail with EXDEV.
     src = tmp_path / "orig" / "v.mp4"

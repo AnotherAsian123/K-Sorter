@@ -190,7 +190,8 @@ def apply_item(item: PlanItem, batch_id: str) -> dict:
                                   settings.verify_checksum)
         if primary.status != "moved":
             return {"id": item.id, "status": primary.status, "reason": primary.reason}
-        _journal(batch_id, item.source, primary.dest, "move", primary.method,
+        _journal(batch_id, item.source, primary.dest,
+                 "dedupe" if primary.method == "dedupe" else "move", primary.method,
                  item.filename, item.group_name, None)
         for rep in item.replica_dests:
             r = mover.replicate(Path(primary.dest), Path(rep))
@@ -205,7 +206,8 @@ def apply_item(item: PlanItem, batch_id: str) -> dict:
     result = mover.safe_move(Path(item.source), Path(item.primary_dest),
                              settings.verify_checksum)
     if result.status == "moved":
-        _journal(batch_id, item.source, result.dest, "move", result.method,
+        _journal(batch_id, item.source, result.dest,
+                 "dedupe" if result.method == "dedupe" else "move", result.method,
                  item.filename, item.group_name, item.member_name)
     return {"id": item.id, "status": result.status, "dest": result.dest,
             "reason": result.reason}
