@@ -43,6 +43,16 @@ def test_flags_wrong_group(tmp_path):
     assert f.group_id == "stayc" and f.member_id == "yoon"
 
 
+def test_flags_wrong_group_even_without_member(tmp_path):
+    # A solo fancam with no resolvable member is still a confident GROUP match —
+    # the wrong folder must still be flagged.
+    _put(tmp_path, "fromis_9", "Group", "STAYC concert fancam.mkv")
+    flags = list(audit.audit_destination(tmp_path))
+    assert len(flags) == 1
+    assert flags[0].group_id == "stayc"
+    assert flags[0].member_id is None
+
+
 def test_flags_wrong_member(tmp_path):
     # Right group, wrong member folder.
     _put(tmp_path, "STAYC", "Sumin", "STAYC Yoon fancam.mkv")

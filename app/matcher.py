@@ -36,6 +36,9 @@ class MatchResult:
     confidence: int = 0
     reason: str = ""
     ambiguous: bool = False
+    # Group-level certainty, independent of whether a member was resolved.
+    group_confidence: int = 0
+    group_ambiguous: bool = False
     is_collab: bool = False
     groups: list[EntityRef] = field(default_factory=list)   # all groups for a collab
     group_candidates: list[tuple[EntityRef, int]] = field(default_factory=list)
@@ -238,6 +241,8 @@ class MatchIndex:
             res.reason = "no group matched"
             return res
         res.group = g
+        res.group_confidence = 0 if g_amb else g_score
+        res.group_ambiguous = g_amb
 
         if not is_solo:
             res.confidence = 0 if g_amb else g_score

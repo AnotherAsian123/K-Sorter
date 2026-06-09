@@ -45,9 +45,8 @@ def _resolve_member_folder(name: str | None, group_id: str) -> str | None:
 
 
 def _flag(vf, current_group, member_folder, res, location, reason) -> engine.PlanItem:
-    idx = get_index()
     cands = [{"id": res.group.id, "name": res.group.name,
-              "name_ko": res.group.name_ko, "score": res.confidence}]
+              "name_ko": res.group.name_ko, "score": res.group_confidence}]
     if current_group and current_group.id != res.group.id:
         cands.append({"id": current_group.id, "name": current_group.name,
                       "name_ko": current_group.name_ko, "score": 0})
@@ -56,7 +55,7 @@ def _flag(vf, current_group, member_folder, res, location, reason) -> engine.Pla
         source=str(vf.path),
         filename=vf.path.name,
         status="confirm",
-        confidence=res.confidence,
+        confidence=res.group_confidence,
         reason=f"possible miscategorisation ({reason})",
         is_collab=False,
         group_id=res.group.id,
@@ -94,9 +93,11 @@ def audit_destination(dest_root: str | Path,
         location = top + "/" + (member_folder or engine.GROUP_SUBFOLDER)
 
         res = idx.match(vf.stem)
-        if not res.group or res.is_collab or res.ambiguous:
-            continue  # can't verify confidently
-        if res.confidence < settings.confirm_threshold:
+        # Gate on GROUP certainty (a solo video with an unresolved member is
+        # still a confident group match — we can verify the folder).
+        if not res.group or res.is_collab or res.group_ambiguous:
+            continue
+        if res.group_confidence < settings.confirm_threshold:
             continue
 
         current_group = _resolve_group_folder(top)
