@@ -220,9 +220,17 @@ def _journal(batch_id, source, dest, action, method,
 def list_batches(limit: int = 20) -> list[dict]:
     rows = db.query(
         "SELECT batch_id, COUNT(*) n, MIN(created_at) at, MAX(created_at) at_end, "
-        "SUM(undone) undone FROM move_journal GROUP BY batch_id "
-        "ORDER BY at_end DESC LIMIT ?", (limit,))
-    return [dict(r) for r in rows]
+        "SUM(undone) undone, COUNT(DISTINCT member_name) nmembers "
+        "FROM move_journal GROUP BY batch_id ORDER BY at_end DESC LIMIT ?", (limit,))
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["groups"] = [g["group_name"] for g in db.query(
+            "SELECT DISTINCT group_name FROM move_journal WHERE batch_id=? "
+            "AND group_name IS NOT NULL AND group_name != '' "
+            "ORDER BY group_name", (d["batch_id"],))]
+        out.append(d)
+    return out
 
 
 def get_batch_moves(batch_id: str) -> list[dict]:

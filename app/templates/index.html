@@ -92,9 +92,11 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
     <summary class="batch-sum">
       <span class="disc" aria-hidden="true">&#9656;</span>
       <span class="bchip">{{ b.n }} move{{ '' if b.n == 1 else 's' }}</span>
-      <span class="muted">{{ b.at }}</span>
-      {% if b.undone %}<span class="muted">&middot; {{ b.undone }} undone</span>{% endif %}
-      <button class="btn clay small" onclick="event.preventDefault();event.stopPropagation();undoBatch('{{ b.batch_id }}', this)">&#8634; Undo</button>
+      {% if b.groups %}<span class="bgroups" title="{{ b.groups|join(', ') }}">{{ b.groups[:4]|join(', ') }}{% if b.groups|length > 4 %} +{{ b.groups|length - 4 }} more{% endif %}</span>{% endif %}
+      {% if b.nmembers %}<span class="muted">&middot; {{ b.nmembers }} member{{ '' if b.nmembers == 1 else 's' }}</span>{% endif %}
+      <span class="muted batch-date">{{ b.at }}</span>
+      {% if b.undone %}<span class="chip manual">{{ b.undone }} undone</span>{% endif %}
+      <button class="btn clay small batch-undo" onclick="event.preventDefault();event.stopPropagation();undoBatch('{{ b.batch_id }}', this)">&#8634; Undo</button>
     </summary>
     <div class="batch-body" hx-get="/batch/{{ b.batch_id }}/moves"
          hx-trigger="toggle once from:closest details" hx-swap="innerHTML">

@@ -156,7 +156,12 @@ input:focus, select:focus { outline: none; border-color: var(--sage);
 .bchip { font-weight: 700; color: var(--olive); background: rgba(150,187,187,.35);
   padding: 3px 10px; border-radius: 999px; font-size: .78rem; }
 [data-theme="dark"] .bchip { color: var(--cream); }
-.batch-sum .btn { margin-left: 6px; }
+.bgroups { color: var(--sage); font-weight: 600; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+[data-theme="dark"] .bgroups { color: var(--teal); }
+.batch-sum .batch-date { font-size: .8rem; }
+/* Undo stays pinned to the right; the gap before it is filled with batch info. */
+.batch-undo { margin-left: auto; flex-shrink: 0; }
 .batch-body { padding: 4px 14px 14px; }
 
 table.moves { width: 100%; border-collapse: collapse; font-size: .82rem; }
