@@ -27,6 +27,7 @@ class JobState:
         self.dest = ""
         self.batch_id = ""
         self.apply = True
+        self.mode = "sort"            # 'sort' | 'audit'
         self.phase = ""               # human label for the current phase
         self.total = 0                # videos discovered (denominator for the bar)
         self.processed = 0
@@ -49,6 +50,7 @@ class JobState:
     def snapshot(self) -> dict:
         return {
             "id": self.id, "status": self.status, "message": self.message,
+            "mode": self.mode,
             "phase": self.phase, "source": self.source, "dest": self.dest,
             "total": self.total, "processed": self.processed, "percent": self.percent,
             "moved": self.moved, "skipped": self.skipped, "errors": self.errors,
@@ -83,6 +85,50 @@ class JobManager:
             target=self._run, args=(st,), daemon=True, name="ksorter-sort")
         self._thread.start()
         return {"ok": True, "id": st.id}
+
+    def start_audit(self, dest: str) -> dict:
+        if self.running:
+            return {"ok": False, "error": "A job is already running."}
+        st = JobState()
+        st.id = uuid.uuid4().hex[:8]
+        st.batch_id = uuid.uuid4().hex[:12]
+        st.source = st.dest = dest
+        st.mode = "audit"
+        st.status = "scanning"
+        st.message = "Checking the sorted folder…"
+        self.state = st
+        self._thread = threading.Thread(
+            target=self._run_audit, args=(st,), daemon=True, name="ksorter-audit")
+        self._thread.start()
+        return {"ok": True, "id": st.id}
+
+    def _run_audit(self, st: JobState) -> None:
+        try:
+            from . import audit
+            st.status = "sorting"
+            st.phase = "Checking"
+
+            def _tick():
+                st.processed += 1
+                st.total = st.processed
+                if st.processed % 25 == 0:
+                    st.message = f"Checked {st.processed} files… ({len(st.review)} flagged)"
+
+            for item in audit.audit_destination(Path(st.dest), on_scan=_tick):
+                st.review.append(item.as_dict())
+
+            st.status = "done"
+            st.phase = "Done"
+            flagged = len(st.review)
+            st.message = (f"Checked {st.processed} sorted files — "
+                          f"{flagged} possible miscategorisation(s) flagged."
+                          if flagged else
+                          f"Checked {st.processed} sorted files — all look correctly filed. ✓")
+            log.info("Audit %s complete: %d scanned, %d flagged", st.id, st.processed, flagged)
+        except Exception as exc:  # noqa: BLE001
+            st.status = "error"
+            st.message = f"Audit failed: {exc}. See the log file for full details."
+            log.exception("Audit %s failed", st.id)
 
     def _run(self, st: JobState) -> None:
         try:

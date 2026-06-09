@@ -118,6 +118,18 @@ async def resolve(request: Request, item_id: str = Form(...),
     return _status_response(request, error=None if res["ok"] else res.get("error"))
 
 
+@app.post("/audit", response_class=HTMLResponse)
+async def audit(request: Request, dest: str = Form("")):
+    dest = dest.strip() or settings.dest_default
+    dv = paths.validate_dir(dest, need_write=True)
+    if not dest:
+        return _status_response(request, error="No destination folder set to check.")
+    if not dv["ok"]:
+        return _status_response(request, error=f"Destination: {dv['reason']}")
+    manager.start_audit(dest)
+    return _status_response(request)
+
+
 @app.post("/resolve-collab", response_class=HTMLResponse)
 async def resolve_collab(request: Request, item_id: str = Form(...), action: str = Form(...)):
     res = manager.resolve_collab(item_id, action)

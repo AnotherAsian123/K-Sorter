@@ -8,6 +8,7 @@
 {% macro resolver(it) %}
 <div class="item" x-data='resolveItem("{{ it.id }}", {{ it.group_candidates|tojson }}, {{ it.member_candidates|tojson }}, "{{ it.group_id or "" }}")'>
   <div class="fname">{{ it.filename }}</div>
+  {% if it.current_location %}<div class="meta">Currently filed under: <strong>{{ it.current_location }}</strong></div>{% endif %}
   <div class="why">{{ it.help or it.reason }}</div>
   {% if it.confidence %}<div class="meta">best guess confidence {{ it.confidence }}%</div>{% endif %}
   <div class="controls">
@@ -123,9 +124,15 @@
 {# ---- needs confirmation (precise questions) ---- #}
 {% if state.review %}
 <div class="card">
+  {% if state.mode == 'audit' %}
+  <h2>Possible miscategorisations <span class="chip confirm">{{ state.review|length }}</span></h2>
+  <p class="muted">These look mis-sorted: the filename disagrees with the folder they're in.
+    Pick the correct group/member and Confirm to move them, or Skip to keep them as-is.</p>
+  {% else %}
   <h2>A quick yes-or-yes? <span class="chip confirm">{{ state.review|length }}</span></h2>
   <p class="muted">Found a likely match but want your nod before moving these. If the
     suggestion is wrong, search for the right group or look it up online &mdash; then Confirm.</p>
+  {% endif %}
   {% for it in state.review %}{% if it.is_collab %}{{ collab_resolver(it) }}{% else %}{{ resolver(it) }}{% endif %}{% endfor %}
 </div>
 {% endif %}

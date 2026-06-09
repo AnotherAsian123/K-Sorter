@@ -78,6 +78,7 @@ class PlanItem:
     group_candidates: list[dict] = field(default_factory=list)
     member_candidates: list[dict] = field(default_factory=list)
     collab_groups: list[dict] = field(default_factory=list)   # groups in a collab
+    current_location: str = ""        # for audit: where the file is filed now
 
     def as_dict(self) -> dict:
         return asdict(self)

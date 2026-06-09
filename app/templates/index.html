@@ -79,6 +79,14 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
     <button class="btn" type="submit">&#9654; Start sorting</button>
     <span class="muted">&nbsp;Confident matches move automatically; only the unsure ones ask for you.</span>
   </form>
+
+  <form hx-post="/audit" hx-target="#status" hx-swap="innerHTML" hx-disabled-elt="find button"
+        style="margin-top:12px"
+        onsubmit="setTimeout(function(){var s=document.getElementById('status');if(s)s.scrollIntoView({behavior:'smooth',block:'start'});},150)">
+    <input type="hidden" name="dest" :value="dest">
+    <button class="btn secondary" type="submit">&#128270; Check sorted folder for mistakes</button>
+    <span class="muted">&nbsp;Re-checks the destination and flags any videos that look mis-sorted.</span>
+  </form>
 </div>
 
 <div id="status" hx-get="/status" hx-trigger="load"></div>
