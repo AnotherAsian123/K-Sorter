@@ -17,7 +17,7 @@
     {% if not data.aliases %}<span class="muted">none</span>{% endif %}
   </div>
   <form hx-post="/db/group/{{ g.id }}/alias" hx-target="#group-detail" hx-swap="innerHTML" class="controls" style="margin-top:6px">
-    <input type="text" name="alias" placeholder="Add nickname / alias (e.g. ADP)" required>
+    <input type="text" name="alias" placeholder="Add nickname / alias (e.g. Cosmic Girls)" required>
     <button class="btn small" type="submit">+ Alias</button>
   </form>
 
