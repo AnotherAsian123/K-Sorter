@@ -112,13 +112,14 @@ document.addEventListener("alpine:init", () => {
   // One resolver for BOTH the confirm and manual queues: candidate quick-picks
   // PLUS a search box and online lookup, so you can always reach the right group
   // even when the suggestions are wrong or the group isn't in the DB yet.
-  Alpine.data("resolveItem", (id, groupCands, memberCands, presetGroupId) => ({
+  Alpine.data("resolveItem", (id, groupCands, memberCands, presetGroupId, suggestedMember) => ({
     id,
     groups: groupCands || [],
     members: memberCands || [],
     groupId: presetGroupId || ((groupCands && groupCands[0]) ? groupCands[0].id : ""),
     memberId: "",
-    q: "", online: [], busy: false, lookupBusy: false, addBusy: false, newMember: "",
+    q: "", online: [], busy: false, lookupBusy: false, addBusy: false,
+    newMember: suggestedMember || "",
     init() {
       // Whenever the group changes (search, dropdown, or online-add), pull that
       // group's members automatically — no separate member lookup needed.

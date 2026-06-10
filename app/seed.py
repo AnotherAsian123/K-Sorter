@@ -11,6 +11,7 @@ kpopnet.json schema (relevant fields):
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 import httpx
 
@@ -129,6 +130,7 @@ def refresh_seed(force_download: bool = False) -> dict:
             raise
 
     db.set_meta("last_seed_status", "ok")
+    db.set_meta("last_seed_at", datetime.now().strftime("%Y-%m-%d %H:%M"))
     counts = db.counts()
     log.info("Seed complete: %s", counts)
     return counts

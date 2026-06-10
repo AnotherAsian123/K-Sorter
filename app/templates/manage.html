@@ -15,6 +15,7 @@
     <div class="stat"><div class="n">{{ counts.aliases }}</div><div class="l">Aliases</div></div>
     <div class="stat"><div class="n">{{ counts.corrections }}</div><div class="l">Learned</div></div>
   </div>
+  {% if last_seed_at %}<p class="muted" style="margin-top:8px">Dataset last updated: <strong>{{ last_seed_at }}</strong></p>{% endif %}
   <p class="muted" style="margin-top:10px">
     “Learned” are aliases K-Sorter picked up from your confirmations. If videos
     are being misidentified, you can forget them all and start clean.

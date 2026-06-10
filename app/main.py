@@ -62,6 +62,7 @@ async def index(request: Request):
         "state": manager.state.snapshot(),
         "batches": list_batches(),
         "last_seed": db.get_meta("last_seed_status", "never"),
+        "last_seed_at": db.get_meta("last_seed_at"),
     })
 
 
@@ -181,7 +182,7 @@ async def members_add(group_id: str = Form(...), name: str = Form(...),
     if not group_id or not name.strip():
         return JSONResponse({"ok": False, "error": "Pick a group and type a member name."})
     mid = await asyncio.to_thread(enrich.add_member, group_id, name.strip(),
-                                  name_ko.strip() or None)
+                                  name_ko.strip() or None, True, True)
     if not mid:
         return JSONResponse({"ok": False, "error": "Unknown group."})
     return JSONResponse({"ok": True, "member_id": mid, "name": name.strip()})
@@ -241,7 +242,8 @@ def _group_detail(request: Request, gid: str | None, refresh: bool = False):
 async def manage_page(request: Request):
     return templates.TemplateResponse(request, "manage.html", {
         "request": request, "counts": db.counts(),
-        "approvals": engine.count_decisions()})
+        "approvals": engine.count_decisions(),
+        "last_seed_at": db.get_meta("last_seed_at")})
 
 
 @app.get("/db/groups", response_class=HTMLResponse)
@@ -294,7 +296,8 @@ async def db_group_delete(request: Request, gid: str):
 async def db_member_add(request: Request, gid: str, name: str = Form(...),
                         name_ko: str = Form("")):
     if name.strip():
-        await asyncio.to_thread(enrich.add_member, gid, name.strip(), name_ko.strip() or None)
+        await asyncio.to_thread(enrich.add_member, gid, name.strip(),
+                                name_ko.strip() or None, True, True)
     return _group_detail(request, gid, refresh=True)
 
 

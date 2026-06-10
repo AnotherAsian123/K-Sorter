@@ -6,6 +6,7 @@ so each unknown is looked up only once.
 """
 from __future__ import annotations
 
+import re
 import uuid
 
 import httpx
@@ -69,12 +70,73 @@ def add_confirmed_group(name: str, name_ko: str | None = None,
     return gid
 
 
-def add_member(group_id: str, name: str, name_ko: str | None = None,
-               is_current: bool = True) -> str | None:
-    """Add a member to an existing group (for rosters the seed data missed, e.g.
-    new line-up additions). Persists + aliases so it matches automatically next time."""
-    if not db.query_one("SELECT 1 FROM groups WHERE id = ?", (group_id,)):
+def _wiki_extract(title: str, intro_only: bool) -> str:
+    params = {"action": "query", "prop": "extracts", "explaintext": 1,
+              "format": "json", "titles": title}
+    if intro_only:
+        params["exintro"] = 1
+    page = httpx.get(_WIKI, params=params, timeout=15,
+                     headers={"User-Agent": _UA, "Api-User-Agent": _UA})
+    page.raise_for_status()
+    pages = page.json().get("query", {}).get("pages", {})
+    return next(iter(pages.values()), {}).get("extract", "") or ""
+
+
+def lookup_member_korean(member_name: str, group_name: str) -> str | None:
+    """Best-effort: find the member's Korean name via the free Wikipedia API.
+    Prefers the member's own page; otherwise scans the group article for the
+    'Member (한글)' pattern. Returns None quietly on any failure — a wrong name
+    would be worse than none."""
+    try:
+        resp = httpx.get(_WIKI, params={
+            "action": "query", "list": "search", "format": "json",
+            "srlimit": 5, "srsearch": f"{member_name} {group_name}",
+        }, timeout=15, headers={"User-Agent": _UA, "Api-User-Agent": _UA})
+        resp.raise_for_status()
+        results = resp.json().get("query", {}).get("search", [])
+        if not results:
+            return None
+        mem_l, grp_l = member_name.lower(), group_name.lower()
+        member_page = next((r["title"] for r in results
+                            if mem_l in r["title"].lower()), None)
+        if member_page:
+            text = _wiki_extract(member_page, intro_only=True)
+            # Stage-name pattern first ("Karina (카리나)"), real name as fallback.
+            for pat in (rf"{re.escape(member_name)}\s*\(([가-힣]{{2,}})\)",
+                        r"(?:Korean|Hangul):\s*([가-힣]{2,})"):
+                m = re.search(pat, text, re.IGNORECASE)
+                if m:
+                    log.info("Member lookup (own page): %s -> %s", member_name, m.group(1))
+                    return m.group(1)
+            return None
+        group_page = next((r["title"] for r in results
+                           if grp_l in r["title"].lower()), None)
+        if not group_page:
+            return None
+        text = _wiki_extract(group_page, intro_only=False)
+    except (httpx.HTTPError, ValueError) as exc:
+        log.warning("Member lookup failed for %r (%s): %s", member_name, group_name, exc)
         return None
+    # In the group article, members are listed as "Yewon (예원)" or
+    # "Yewon (Korean: 김예원…)".
+    m = re.search(rf"{re.escape(member_name)}\s*\(\s*(?:Korean:\s*)?([가-힣]{{2,}})",
+                  text, re.IGNORECASE)
+    if m:
+        log.info("Member lookup (group page): %s -> %s", member_name, m.group(1))
+        return m.group(1)
+    return None
+
+
+def add_member(group_id: str, name: str, name_ko: str | None = None,
+               is_current: bool = True, auto_lookup: bool = False) -> str | None:
+    """Add a member to an existing group (for rosters the seed data missed, e.g.
+    new line-up additions). Persists + aliases so it matches automatically next time.
+    With auto_lookup, fetches missing info (Korean name) from the web."""
+    row = db.query_one("SELECT name FROM groups WHERE id = ?", (group_id,))
+    if not row:
+        return None
+    if auto_lookup and not name_ko:
+        name_ko = lookup_member_korean(name, row["name"])
     mid = "user-" + uuid.uuid4().hex[:8]
     db.execute("INSERT INTO members(id, stage_name, stage_name_ko) VALUES(?,?,?)",
                (mid, name, name_ko))

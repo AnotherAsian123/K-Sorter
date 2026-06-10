@@ -223,3 +223,15 @@ def audit_destination(dest_root: str | Path,
             cur_mid = _resolve_member_folder(member_folder, current_group.id)
             if cur_mid != res.member.id:
                 yield _flag(vf, current_group, member_folder, res, location, "member")
+        # 3) Solo video at Group level whose member the DB doesn't know, but the
+        #    fancam tag names them — likely a NEW member (rebuilt line-ups).
+        elif (res.is_solo and res.member is None and res.member_hint
+              and member_folder is None):
+            item = _flag(vf, current_group, member_folder, res, location,
+                         "member not in database")
+            item.suggested_member = engine._hint_display(res.member_hint)
+            item.help = (f"Solo fancam of “{item.suggested_member}”, who isn't in "
+                         f"{current_group.name}'s roster — possibly a NEW member. "
+                         f"Add them with + Member (details are fetched "
+                         f"automatically), then Confirm — or Skip to keep it here.")
+            yield item

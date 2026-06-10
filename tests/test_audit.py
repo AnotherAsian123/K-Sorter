@@ -126,6 +126,18 @@ def test_unidentifiable_not_flagged(tmp_path):
     assert list(audit.audit_destination(tmp_path)) == []
 
 
+def test_new_member_hint_flagged_at_group_level(tmp_path):
+    # Solo fancam of someone NOT in the roster (rebuilt line-up), sitting at
+    # Group level -> flagged with the new-member suggestion prefilled.
+    _put(tmp_path, "STAYC", "Group", "스테이씨 예원 직캠 (STAYC NEWGIRL FanCam).mkv")
+    flags = list(audit.audit_destination(tmp_path))
+    assert len(flags) == 1
+    f = flags[0]
+    assert f.group_id == "stayc"
+    assert f.suggested_member == "Newgirl"
+    assert "member not in database" in f.reason
+
+
 def test_unknown_hashtag_placement_flagged(tmp_path):
     # A file placed via a learned alias whose hashtags name an unknown entity
     # must be flagged wherever it sits.

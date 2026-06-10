@@ -79,6 +79,7 @@ class PlanItem:
     member_candidates: list[dict] = field(default_factory=list)
     collab_groups: list[dict] = field(default_factory=list)   # groups in a collab
     current_location: str = ""        # for audit: where the file is filed now
+    suggested_member: str = ""        # likely NEW member name (prefills + Member)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -114,6 +115,11 @@ def _roster_candidates(group_id: str, fuzzy: list[tuple[EntityRef, int]]) -> lis
     # Best fuzzy guesses first, then current members, then former.
     out.sort(key=lambda c: (-c["score"], not c["current"], c["name"]))
     return out
+
+
+def _hint_display(hint: str) -> str:
+    """Nice display form for a member-name hint (YEWON -> Yewon; Hangul as-is)."""
+    return hint.title() if hint.isascii() else hint
 
 
 def _cands(pairs: list[tuple[EntityRef, int]]) -> list[dict]:
@@ -185,9 +191,16 @@ def build_plan_item(vf: VideoFile, dest_root: Path) -> PlanItem:
         item.help = "More than one group could match — pick the right one."
     elif res.is_solo and res.member is None and res.group:
         # Group is known; just need the member. Offer the FULL roster.
-        item.help = (f"Found {res.group.name}, but couldn't tell which member. "
-                     f"Pick the member — or choose “group folder” if it's the whole group.")
         item.member_candidates = _roster_candidates(res.group.id, res.member_candidates)
+        if res.member_hint:
+            item.suggested_member = _hint_display(res.member_hint)
+            item.help = (f"Found {res.group.name}, but “{item.suggested_member}” isn't a "
+                         f"member we know — possibly a NEW member. Add them with "
+                         f"+ Member (details are fetched automatically), or pick an "
+                         f"existing member.")
+        else:
+            item.help = (f"Found {res.group.name}, but couldn't tell which member. "
+                         f"Pick the member — or choose “group folder” if it's the whole group.")
     else:
         item.help = "Low confidence — please confirm the group (and member)."
     return item

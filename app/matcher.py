@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from rapidfuzz import fuzz, process
 
 from . import database as db
-from .normalize import COLLAB_MARKERS, TAG_IGNORE, hashtags, normalize, tokens_for_match
+from .normalize import (COLLAB_MARKERS, TAG_IGNORE, hashtags, member_hint,
+                        normalize, tokens_for_match)
 
 # Below this fuzzy score we treat it as "no confident match" rather than guess.
 FUZZY_FLOOR = 65
@@ -41,6 +42,7 @@ class MatchResult:
     group_ambiguous: bool = False
     is_collab: bool = False
     collab_marker: bool = False   # explicit 'x'/'feat'/'합동'… marker present
+    member_hint: str | None = None  # likely member name the DB doesn't know yet
     groups: list[EntityRef] = field(default_factory=list)   # all groups for a collab
     group_candidates: list[tuple[EntityRef, int]] = field(default_factory=list)
     member_candidates: list[tuple[EntityRef, int]] = field(default_factory=list)
@@ -108,6 +110,12 @@ class MatchIndex:
         for alias in (*self.group_alias_to_ids, *self.member_alias_to_ids):
             compact = alias.replace(" ", "")
             self._known_tag_tokens.update({alias, compact, compact.replace("_", "")})
+
+        # Reverse map for member-hint extraction (strip the group's own names).
+        self.group_aliases_by_id: dict[str, set[str]] = {}
+        for alias, ids in self.group_alias_to_ids.items():
+            for gid in ids:
+                self.group_aliases_by_id.setdefault(gid, set()).add(alias)
 
     def _tag_known(self, tag: str) -> bool:
         """Does this hashtag correspond to any known group/member name?"""
@@ -342,6 +350,10 @@ class MatchIndex:
             res.confidence = 0 if res.ambiguous else min(g_score, m_score)
             if m is None:
                 res.reason = "group matched, member unresolved"
+                # The "(GROUP MEMBER FanCam)" tag often names a member the DB
+                # doesn't know yet (new / rebuilt line-ups) — extract a hint.
+                res.member_hint = member_hint(
+                    filename_stem, self.group_aliases_by_id.get(g.id, set()))
             else:
                 res.reason = "group + member match" + (" (ambiguous)" if res.ambiguous else "")
         if tag_doubt:

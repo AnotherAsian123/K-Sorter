@@ -101,6 +101,27 @@ def hashtags(filename_stem: str) -> list[str]:
     return [t for t in (normalize(m) for m in _HASHTAG_RE.findall(filename_stem)) if t]
 
 
+# "(GROUP MEMBER FanCam)" — the standard fancam tag. After removing the group's
+# name, what's left is almost always the member's name: a high-precision hint
+# for members the database doesn't know yet (new / rebuilt line-ups).
+_FANCAM_PAREN_RE = re.compile(r"\(([^()]*?)\s*fan\s?cam\)", re.IGNORECASE)
+
+
+def member_hint(filename_stem: str, group_alias_norms: set[str]) -> str | None:
+    m = _FANCAM_PAREN_RE.search(filename_stem)
+    if not m:
+        return None
+    padded = f" {normalize(m.group(1))} "
+    for alias in sorted(group_alias_norms, key=len, reverse=True):
+        if alias:
+            padded = padded.replace(f" {alias} ", " ")
+    tokens = [t for t in padded.split()
+              if t not in FILLER and t not in LEARN_STOP and not t.isdigit()]
+    if not tokens or len(tokens) > 3:
+        return None
+    return " ".join(tokens)
+
+
 def tokens_for_match(filename_stem: str) -> tuple[list[str], bool]:
     """Return (meaningful_tokens, is_solo_video) from a filename stem.
 

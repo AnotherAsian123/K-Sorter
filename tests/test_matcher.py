@@ -95,3 +95,21 @@ def test_date_not_required_and_ignored():
     r = match("2023.05.06 TWICE Mina 세로직캠")
     assert r.group.id == "twice"
     assert r.member.id == "mina"
+
+
+def test_member_hint_extraction():
+    from app.normalize import member_hint
+    aliases = {"fifty fifty", "피프티피프티"}
+    fn = "[4K] 251114 피프티피프티 예원 'Pookie' 직캠 (FIFTY FIFTY YEWON FanCam) [djUH4KoEGrE]"
+    assert member_hint(fn, aliases) == "yewon"
+    assert member_hint("(fromis_9 Lee CHAEYOUNG FanCam)", {"fromis_9", "프로미스나인"}) \
+        == "lee chaeyoung"
+    assert member_hint("TWICE The Feels MV", {"twice"}) is None
+
+
+def test_unresolved_member_gets_hint():
+    # Member not in the DB (new line-up) -> the fancam tag supplies the hint.
+    r = match("TWICE 직캠 (TWICE NEWFACE FanCam)")
+    assert r.group.id == "twice"
+    assert r.member is None
+    assert r.member_hint == "newface"

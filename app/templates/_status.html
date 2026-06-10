@@ -6,7 +6,7 @@
 {# One resolver used by BOTH queues: candidate quick-picks + free search + online
    lookup, so the correct group is always reachable even if it isn't suggested. #}
 {% macro resolver(it) %}
-<div class="item" x-data='resolveItem("{{ it.id }}", {{ it.group_candidates|tojson }}, {{ it.member_candidates|tojson }}, "{{ it.group_id or "" }}")'>
+<div class="item" x-data='resolveItem("{{ it.id }}", {{ it.group_candidates|tojson }}, {{ it.member_candidates|tojson }}, "{{ it.group_id or "" }}", {{ (it.suggested_member or "")|tojson }})'>
   <div class="fname">{{ it.filename }}</div>
   {% if it.current_location %}<div class="meta">Currently filed under: <strong>{{ it.current_location }}</strong></div>{% endif %}
   <div class="why">{{ it.help or it.reason }}</div>

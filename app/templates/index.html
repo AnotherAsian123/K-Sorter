@@ -17,6 +17,7 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
   <p class="muted" style="margin-top:12px">
     Seeded from the open kpopnet dataset (Korean names, nicknames &amp; former members included).
     Refreshes on restart or on demand.
+    {% if last_seed_at %}<br>Last updated: <strong>{{ last_seed_at }}</strong>{% endif %}
   </p>
   {% if counts.groups == 0 %}
   <div class="banner warn" style="margin-top:12px">
