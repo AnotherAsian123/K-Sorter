@@ -256,6 +256,7 @@ class JobManager:
         item = engine.PlanItem(**queue[idx])
         dest_root = Path(st.dest)
         lang, _template = engine.get_naming()
+        record = True
 
         if action == "replicate":
             item.is_collab = True  # primary_dest + replica_dests already set
@@ -287,14 +288,20 @@ class JobManager:
             item.primary_dest = str(
                 dest_root / engine._name(g, lang) / engine.GROUP_SUBFOLDER / item.filename)
             item.group_id, item.group_name = g.id, g.name
+            # A solo fancam filed at group level shouldn't be locked in: leave
+            # no approval so the audit's member pass can refine it later.
+            from .normalize import tokens_for_match
+            _toks, is_solo = tokens_for_match(Path(item.filename).stem)
+            record = not is_solo
         else:
             return {"ok": False, "error": "Unknown action."}
 
         result = engine.apply_item(item, st.batch_id)
         if result["status"] == "moved":
             st.moved += 1
-            engine.record_decision(item.filename,
-                                   engine.rel_location(result.get("dest", ""), Path(st.dest)))
+            if record:
+                engine.record_decision(item.filename,
+                                       engine.rel_location(result.get("dest", ""), Path(st.dest)))
             queue.pop(idx)
             return {"ok": True, "dest": result.get("dest")}
         return {"ok": False, "error": result.get("reason", result["status"])}

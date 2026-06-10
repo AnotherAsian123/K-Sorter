@@ -117,6 +117,16 @@ def test_collab_resolve_all_groups_no_special(tmp_path):
     assert not (dst / "_Special Stages" / f.name).exists()
 
 
+def test_collab_group_action_on_solo_leaves_no_approval(tmp_path):
+    # "Only <group>" on a SOLO fancam must not lock in the Group/ placement —
+    # the audit's member pass needs to be able to refine it later.
+    mgr, item, f, dst = _collab_item(tmp_path / "solo", name="TWICE Nayeon x ITZY fancam.mp4")
+    gid = next(g["id"] for g in item.collab_groups if g["name"] == "TWICE")
+    assert mgr.resolve_collab(item.id, f"group:{gid}")["ok"]
+    assert (dst / "TWICE" / "Group" / f.name).exists()
+    assert engine.get_decision(f.name) is None  # no approval recorded
+
+
 def test_collab_resolve_special_only(tmp_path):
     mgr, item, f, dst = _collab_item(tmp_path / "sp")
     assert mgr.resolve_collab(item.id, "special")["ok"]

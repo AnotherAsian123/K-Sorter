@@ -16,7 +16,7 @@ from . import engine
 from .config import settings
 from .logging_setup import get_logger
 from .matcher import EntityRef, get_index
-from .normalize import normalize
+from .normalize import normalize, tokens_for_match
 from .scanner import scan
 
 log = get_logger("ksorter.audit")
@@ -71,6 +71,31 @@ def _flag(vf, current_group, member_folder, res, location, reason) -> engine.Pla
     item.help = (f"Filed under “{location}”, but the filename looks like "
                  f"{suggestion}. Pick the correct group/member and Confirm to move "
                  f"it — or Skip to keep it where it is.")
+    return item
+
+
+def _flag_member(vf, group: EntityRef, member: EntityRef, score: int,
+                 location: str) -> engine.PlanItem:
+    """Right group, but a solo fancam sitting outside its member's folder."""
+    item = engine.PlanItem(
+        id=uuid.uuid4().hex[:12],
+        source=str(vf.path),
+        filename=vf.path.name,
+        status="confirm",
+        confidence=score,
+        reason="possible miscategorisation (member)",
+        group_id=group.id,
+        group_name=group.name,
+        group_candidates=[{"id": group.id, "name": group.name,
+                           "name_ko": group.name_ko, "score": 100}],
+        member_candidates=engine._roster_candidates(group.id, [(member, score)]),
+        member_id=member.id,
+        member_name=member.name,
+        current_location=location,
+    )
+    item.help = (f"Filed under “{location}”, but this looks like a solo video of "
+                 f"{member.name}. Confirm to move it into the member's folder — "
+                 f"or Skip to keep it where it is.")
     return item
 
 
@@ -143,11 +168,23 @@ def audit_destination(dest_root: str | Path,
         res = idx.match(vf.stem)
         if res.is_collab:
             # If this folder is one of the named groups (or it's a marked,
-            # genuine collab) it's a plausible home — leave it. Otherwise the
-            # file sits under an unrelated group: ask the user.
+            # genuine collab) it's a plausible home — leave it at GROUP level.
+            # Otherwise the file sits under an unrelated group: ask the user.
             cg = _resolve_group_folder(top)
-            if not res.collab_marker and not (cg and any(g.id == cg.id for g in res.groups)):
+            in_named_group = bool(cg and any(g.id == cg.id for g in res.groups))
+            if not res.collab_marker and not in_named_group:
                 yield _flag_collab(vf, res, dest_root, location)
+                continue
+            # Group placement accepted — but a solo fancam still belongs in its
+            # member's folder. Resolve the member WITHIN the current group (the
+            # collab match never resolves members, so do it here).
+            if in_named_group and res.is_solo:
+                tokens, _solo = tokens_for_match(vf.stem)
+                norm_full = normalize(" ".join(tokens))
+                m, m_score, m_amb, _cands = idx.match_member(norm_full, cg.id)
+                if (m and not m_amb and m_score >= settings.confirm_threshold
+                        and _resolve_member_folder(member_folder, cg.id) != m.id):
+                    yield _flag_member(vf, cg, m, m_score, location)
             continue
         # Gate on GROUP certainty (a solo video with an unresolved member is
         # still a confident group match — we can verify the folder).

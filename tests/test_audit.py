@@ -94,6 +94,24 @@ def test_markerless_multigroup_in_named_group_left_alone(tmp_path):
     assert list(audit.audit_destination(tmp_path)) == []
 
 
+def test_multigroup_solo_in_group_folder_flags_member(tmp_path):
+    # Multi-group filename (song-title noise) already filed under the right
+    # group, but it's a SOLO fancam -> must still be flagged for the member.
+    _put(tmp_path, "STAYC", "Group", "STAYC Yoon fromis_9 fancam.mkv")
+    flags = list(audit.audit_destination(tmp_path))
+    assert len(flags) == 1
+    f = flags[0]
+    assert not f.is_collab
+    assert f.group_id == "stayc" and f.member_id == "yoon"
+    assert "member" in f.reason
+    assert f.current_location == "STAYC/Group"
+
+
+def test_multigroup_solo_in_correct_member_folder_left_alone(tmp_path):
+    _put(tmp_path, "STAYC", "Yoon", "STAYC Yoon fromis_9 fancam.mkv")
+    assert list(audit.audit_destination(tmp_path)) == []
+
+
 def test_markerless_multigroup_in_unrelated_group_flagged(tmp_path):
     # Sitting under a folder that is NONE of the named groups -> needs a decision.
     _put(tmp_path, "Weeekly", "Group", "STAYC fromis_9 mention.mkv")
