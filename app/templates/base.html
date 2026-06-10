@@ -2,7 +2,9 @@
 <html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F2E3BC">
   <title>K-Sorter</title>
   <link rel="icon" type="image/png" href="/static/img/favicon.png">
   <link rel="stylesheet" href="/static/css/style.css">
@@ -19,8 +21,12 @@
         <h1>K&#8209;Sorter <span class="beat">&#9834;</span></h1>
         <p class="tagline">sort once, sort TWICE</p>
       </div>
-      <div class="spacer"></div>
-      <button class="toggle" onclick="toggleTheme()">&#9789; theme</button>
+      <span class="spacer"></span>
+      <nav class="links" aria-label="Pages">
+        <a href="/">Sort</a>
+        <a href="/manage">Database</a>
+      </nav>
+      <button class="toggle" onclick="toggleTheme()" aria-label="Toggle light/dark theme">&#9789;</button>
     </header>
     {% block content %}{% endblock %}
     <p class="muted" style="text-align:center;margin-top:30px">

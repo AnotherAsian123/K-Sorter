@@ -7,10 +7,14 @@ function toggleTheme() {
   try { localStorage.setItem("ks-theme", next); } catch (e) {}
 }
 (function () {
-  try {
-    const saved = localStorage.getItem("ks-theme");
-    if (saved) document.documentElement.setAttribute("data-theme", saved);
-  } catch (e) {}
+  // Saved choice wins; otherwise follow the system preference.
+  let theme = null;
+  try { theme = localStorage.getItem("ks-theme"); } catch (e) {}
+  if (!theme && window.matchMedia &&
+      matchMedia("(prefers-color-scheme: dark)").matches) {
+    theme = "dark";
+  }
+  if (theme) document.documentElement.setAttribute("data-theme", theme);
 })();
 
 async function postForm(url, data) {

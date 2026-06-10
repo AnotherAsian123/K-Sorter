@@ -14,13 +14,13 @@
   <div class="controls">
     <select x-model="groupId" title="Group">
       <option value="">&mdash; pick group &mdash;</option>
-      <template x-for="g in groups" :key="g.id"><option :value="g.id" x-text="g.name + (g.name_ko ? ' ('+g.name_ko+')' : '') + (g.score ? ' · '+g.score+'%' : '')"></option></template>
+      <template x-for="g in groups" :key="g.id"><option :value="g.id" :selected="g.id === groupId" x-text="g.name + (g.name_ko ? ' ('+g.name_ko+')' : '') + (g.score ? ' · '+g.score+'%' : '')"></option></template>
     </select>
     <input type="text" placeholder="Search group&hellip;" x-model="q"
            @keyup.debounce.400ms="searchGroups()" @keydown.enter.prevent="searchGroups()">
     <select x-model="memberId" title="Member">
       <option value="">&mdash; group folder (no member) &mdash;</option>
-      <template x-for="m in members" :key="m.id"><option :value="m.id" x-text="m.name + (m.name_ko ? ' ('+m.name_ko+')' : '') + (m.current === false ? ' (former)' : '')"></option></template>
+      <template x-for="m in members" :key="m.id"><option :value="m.id" :selected="m.id === memberId" x-text="m.name + (m.name_ko ? ' ('+m.name_ko+')' : '') + (m.current === false ? ' (former)' : '')"></option></template>
     </select>
     <input type="text" placeholder="+ add member&hellip;" x-model="newMember" x-show="groupId"
            @keydown.enter.prevent="addMember()" style="max-width:150px"

@@ -5,8 +5,86 @@ window.KS_NAMING = {language: "{{ naming[0] }}", template: "{{ naming[1] }}"};
 window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ settings.dest_default }}"};
 </script>
 
+{% if counts.groups == 0 %}
+<div class="banner warn">
+  ⚠️ The database is empty. Click <strong>Update Database</strong> below to load
+  it — until then, every video will land in the review queue.
+</div>
+{% endif %}
 
-<div class="card">
+{# ---- primary flow: pick folders, sort ---- #}
+<section class="card" x-data="setup()">
+  <h2>What shall we sort?</h2>
+  <div class="row">
+    <div>
+      <label>Source folder (the messy one)</label>
+      <input type="text" name="source" x-model="source" placeholder="/source"
+             autocomplete="off" spellcheck="false">
+      <div hx-post="/validate-path" hx-trigger="change from:previous input, keyup changed delay:600ms from:previous input"
+           hx-include="previous input" hx-vals='{"need_write":"false"}' hx-target="this" hx-swap="innerHTML"></div>
+    </div>
+    <div>
+      <label>Destination folder (sort into here)</label>
+      <input type="text" name="dest" x-model="dest" placeholder="/destination"
+             autocomplete="off" spellcheck="false">
+      <div hx-post="/validate-path" hx-trigger="change from:previous input, keyup changed delay:600ms from:previous input"
+           hx-include="previous input" hx-vals='{"need_write":"true"}' hx-target="this" hx-swap="innerHTML"></div>
+    </div>
+  </div>
+
+  <details class="options">
+    <summary>Options</summary>
+    <div class="row" style="margin-top:6px">
+      <div>
+        <label>Folder names</label>
+        <select x-model="language" @change="saveSettings()">
+          <option value="en">English (e.g. TWICE)</option>
+          <option value="ko">Korean (e.g. &#53944;&#50752;&#51060;&#49828;)</option>
+        </select>
+      </div>
+      <div>
+        <label>Member folder template</label>
+        <select x-model="template" @change="saveSettings()">
+          <option value="nested">Group / Member  (default)</option>
+          <option value="flat">Group - Member</option>
+          <option value="{group}/{member}">Custom: {group}/{member}</option>
+        </select>
+      </div>
+      <div>
+        <label>Mode</label>
+        <select x-model="mode">
+          <option value="apply">Auto-sort confident matches</option>
+          <option value="dryrun">Dry run (preview &amp; export CSV only)</option>
+        </select>
+      </div>
+    </div>
+  </details>
+
+  <div class="row" style="margin-top:18px; align-items:center">
+    <form hx-post="/sort" hx-target="#status" hx-swap="innerHTML" hx-disabled-elt="find button"
+          style="flex:0 1 auto; min-width:0">
+      <input type="hidden" name="source" :value="source">
+      <input type="hidden" name="dest" :value="dest">
+      <input type="hidden" name="mode" :value="mode">
+      <button class="btn lg" type="submit">&#9654; Start sorting</button>
+    </form>
+    <form hx-post="/audit" hx-target="#status" hx-swap="innerHTML" hx-disabled-elt="find button"
+          style="flex:0 1 auto; min-width:0"
+          onsubmit="setTimeout(function(){var s=document.getElementById('status');if(s)s.scrollIntoView({behavior:'smooth',block:'start'});},150)">
+      <input type="hidden" name="dest" :value="dest">
+      <button class="btn secondary" type="submit">&#128270; Check sorted folder</button>
+    </form>
+  </div>
+  <p class="muted" style="margin:10px 0 0">
+    Confident matches move automatically; only the unsure ones ask for you.
+    The check re-scans the destination and flags anything that looks mis-sorted.
+  </p>
+</section>
+
+<div id="status" hx-get="/status" hx-trigger="load"></div>
+
+{# ---- database strip ---- #}
+<section class="card">
   <h2>Database</h2>
   <div class="stats">
     <div class="stat"><div class="n">{{ counts.groups }}</div><div class="l">Groups</div></div>
@@ -19,81 +97,18 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
     Refreshes on restart or on demand.
     {% if last_seed_at %}<br>Last updated: <strong>{{ last_seed_at }}</strong>{% endif %}
   </p>
-  {% if counts.groups == 0 %}
-  <div class="banner warn" style="margin-top:12px">
-    ⚠️ The database is empty. Click <strong>Update Database</strong> below to load
-    it — until then, every video will land in the review queue.
+  <div class="row" style="align-items:center">
+    <div style="flex:0 1 auto; display:flex; gap:8px; flex-wrap:wrap">
+      <button class="btn teal small" onclick="updateDb(this)">&#8635; Update Database</button>
+      <a class="btn secondary small" href="/manage" style="text-decoration:none">&#9881; Manage database</a>
+    </div>
+    <span id="db-msg" class="muted"></span>
   </div>
-  {% endif %}
-  <button class="btn teal small" onclick="updateDb(this)">&#8635; Update Database</button>
-  <a class="btn secondary small" href="/manage" style="text-decoration:none">&#9881; Manage database (advanced)</a>
-  <span id="db-msg" class="muted"></span>
-</div>
+</section>
 
-<div class="card" x-data="setup()">
-  <h2>What shall we sort?</h2>
-  <div class="row">
-    <div>
-      <label>Source folder (the messy one)</label>
-      <input type="text" name="source" x-model="source" placeholder="/mnt/user/Media/unsorted">
-      <div hx-post="/validate-path" hx-trigger="change from:previous input, keyup changed delay:600ms from:previous input"
-           hx-include="previous input" hx-vals='{"need_write":"false"}' hx-target="this" hx-swap="innerHTML"></div>
-    </div>
-    <div>
-      <label>Destination folder (sort into here)</label>
-      <input type="text" name="dest" x-model="dest" placeholder="/mnt/user/Media/K-Pop">
-      <div hx-post="/validate-path" hx-trigger="change from:previous input, keyup changed delay:600ms from:previous input"
-           hx-include="previous input" hx-vals='{"need_write":"true"}' hx-target="this" hx-swap="innerHTML"></div>
-    </div>
-  </div>
-
-  <div class="row" style="margin-top:6px">
-    <div>
-      <label>Folder names</label>
-      <select x-model="language" @change="saveSettings()">
-        <option value="en">English (e.g. TWICE)</option>
-        <option value="ko">Korean (e.g. &#53944;&#50752;&#51060;&#49828;)</option>
-      </select>
-    </div>
-    <div>
-      <label>Member folder template</label>
-      <select x-model="template" @change="saveSettings()">
-        <option value="nested">Group / Member  (default)</option>
-        <option value="flat">Group - Member</option>
-        <option value="{group}/{member}">Custom: {group}/{member}</option>
-      </select>
-    </div>
-    <div>
-      <label>Mode</label>
-      <select x-model="mode">
-        <option value="apply">Auto-sort confident matches</option>
-        <option value="dryrun">Dry run (preview &amp; export CSV only)</option>
-      </select>
-    </div>
-  </div>
-
-  <form hx-post="/sort" hx-target="#status" hx-swap="innerHTML" hx-disabled-elt="find button"
-        style="margin-top:18px">
-    <input type="hidden" name="source" :value="source">
-    <input type="hidden" name="dest" :value="dest">
-    <input type="hidden" name="mode" :value="mode">
-    <button class="btn" type="submit">&#9654; Start sorting</button>
-    <span class="muted">&nbsp;Confident matches move automatically; only the unsure ones ask for you.</span>
-  </form>
-
-  <form hx-post="/audit" hx-target="#status" hx-swap="innerHTML" hx-disabled-elt="find button"
-        style="margin-top:12px"
-        onsubmit="setTimeout(function(){var s=document.getElementById('status');if(s)s.scrollIntoView({behavior:'smooth',block:'start'});},150)">
-    <input type="hidden" name="dest" :value="dest">
-    <button class="btn secondary" type="submit">&#128270; Check sorted folder for mistakes</button>
-    <span class="muted">&nbsp;Re-checks the destination and flags any videos that look mis-sorted.</span>
-  </form>
-</div>
-
-<div id="status" hx-get="/status" hx-trigger="load"></div>
-
+{# ---- move history ---- #}
 {% if batches %}
-<div class="card">
+<section class="card">
   <h2>Move history &amp; undo</h2>
   <p class="muted">Every batch is journaled. Expand to see exactly what moved where; undo puts it back.</p>
   {% for b in batches %}
@@ -113,7 +128,7 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
     </div>
   </details>
   {% endfor %}
-</div>
+</section>
 {% endif %}
 
 {% endblock %}
