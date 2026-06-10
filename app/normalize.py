@@ -24,6 +24,15 @@ FILLER = {
 # Tokens that mark a *solo* video (member-level), plan.md §5 step 3.
 SOLO_MARKERS = {"fancam", "focus", "직캠", "포커스", "세로직캠", "1인샷", "직캠세로"}
 
+# Tokens that signal a genuine multi-group collab stage. Without one of these,
+# a second group name in a filename is treated as noise (song titles often
+# contain words that are also group names, e.g. 'Secret Code' vs the group
+# Secret) — Special Stages should be rare.
+COLLAB_MARKERS = {
+    "x", "vs", "feat", "ft", "with", "collab", "collaboration",
+    "콜라보", "합동", "합동무대", "합동공연", "스페셜",
+}
+
 # Common fancam-title words that are NOT names. We must never learn these as
 # aliases (doing so caused groups to be misidentified, e.g. false collabs).
 LEARN_STOP = {

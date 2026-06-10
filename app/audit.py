@@ -85,9 +85,21 @@ def audit_destination(dest_root: str | Path,
             parts = vf.path.relative_to(dest_root).parts
         except ValueError:
             continue
-        if not parts or parts[0] == engine.SPECIAL_STAGES:
-            continue  # collab folder — can't verify a single group
+        if not parts:
+            continue
         top = parts[0]
+
+        # _Special Stages: should be rare. If the filename now resolves to a
+        # single confident group (not a collab), it was misfiled — flag it.
+        if top == engine.SPECIAL_STAGES:
+            location = engine.SPECIAL_STAGES
+            if engine.get_decision(vf.path.name) == location:
+                continue
+            res = idx.match(vf.stem)
+            if (res.group and not res.is_collab and not res.group_ambiguous
+                    and res.group_confidence >= settings.confirm_threshold):
+                yield _flag(vf, None, None, res, location, "single group, not a collab")
+            continue
         member_folder = (parts[1] if len(parts) >= 3
                          and parts[1] != engine.GROUP_SUBFOLDER else None)
         location = top + "/" + (member_folder or engine.GROUP_SUBFOLDER)

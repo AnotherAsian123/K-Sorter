@@ -47,6 +47,39 @@ def test_title_dump_does_not_pollute_then_collab():
     assert r.group.id == "stayc"
 
 
+def test_song_title_group_name_is_not_a_collab():
+    # 'Secret Code' in a song title must not pair with the group Secret.
+    db.execute("INSERT OR REPLACE INTO groups(id,name,is_active) VALUES('secret','Secret',1)")
+    _alias("group", "secret", "Secret")
+    matcher.reload_index()
+    r = matcher.get_index().match(
+        "240705 스테이씨 'Feel Good (Secret Code)' 직캠 (STAYC FanCam)")
+    assert not r.is_collab
+    assert r.group.id == "stayc"
+
+
+def test_collab_requires_marker():
+    # Two real group names but no collab marker -> best single group, not collab.
+    r = matcher.get_index().match("스테이씨 fromis_9 mention")
+    assert not r.is_collab
+    # With an explicit marker it IS a collab.
+    r2 = matcher.get_index().match("STAYC x fromis_9 합동무대")
+    assert r2.is_collab
+
+
+def test_subunit_not_a_collab():
+    db.execute("INSERT OR REPLACE INTO groups(id,name,is_active) VALUES('nct','NCT',1)")
+    db.execute("INSERT OR REPLACE INTO groups(id,name,is_active,parent_id)"
+               " VALUES('nctdream','NCT Dream',1,'nct')")
+    _alias("group", "nct", "NCT")
+    _alias("group", "nctdream", "NCT Dream")
+    matcher.reload_index()
+    # 'NCT' inside 'NCT Dream' (containment) — even with a marker token present.
+    r = matcher.get_index().match("NCT Dream x mas Candy stage")
+    assert not r.is_collab
+    assert r.group.id == "nctdream"
+
+
 def test_purge_cleans_existing_pollution():
     # Inject a previously-learned junk alias, confirm it pollutes, then purge.
     db.execute("INSERT OR IGNORE INTO aliases(entity_type,entity_id,alias,alias_raw)"
@@ -54,7 +87,7 @@ def test_purge_cleans_existing_pollution():
     db.execute("INSERT OR REPLACE INTO corrections(pattern,entity_type,entity_id,group_id)"
                " VALUES('콘서트','group','fromis','fromis')")
     matcher.reload_index()
-    fn = "스테이씨 콘서트 (STAYC FanCam)"
-    assert matcher.get_index().match(fn).is_collab          # polluted
+    fn = "콘서트 클립"  # only the polluted word — would wrongly match fromis_9
+    assert matcher.get_index().match(fn).group.id == "fromis"   # polluted
     assert engine.purge_polluted_aliases() >= 1
-    assert not matcher.get_index().match(fn).is_collab      # clean
+    assert matcher.get_index().match(fn).group is None           # clean

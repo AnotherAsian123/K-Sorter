@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from rapidfuzz import fuzz, process
 
 from . import database as db
-from .normalize import normalize, tokens_for_match
+from .normalize import COLLAB_MARKERS, normalize, tokens_for_match
 
 # Below this fuzzy score we treat it as "no confident match" rather than guess.
 FUZZY_FLOOR = 65
@@ -56,9 +56,12 @@ class MatchIndex:
         self.members: dict[str, EntityRef] = {}
         self.group_to_members: dict[str, list[str]] = {}
         self.gm_current: dict[tuple[str, str], bool] = {}
+        self.group_parent: dict[str, str] = {}
 
-        for r in db.query("SELECT id, name, name_ko FROM groups"):
+        for r in db.query("SELECT id, name, name_ko, parent_id FROM groups"):
             self.groups[r["id"]] = EntityRef(r["id"], "group", r["name"], r["name_ko"])
+            if r["parent_id"]:
+                self.group_parent[r["id"]] = r["parent_id"]
         for r in db.query("SELECT id, stage_name, stage_name_ko FROM members"):
             self.members[r["id"]] = EntityRef(r["id"], "member", r["stage_name"], r["stage_name_ko"])
         for r in db.query("SELECT group_id, member_id, is_current FROM group_members"):
@@ -106,9 +109,32 @@ class MatchIndex:
                     hits.append((g, alias))
         return hits
 
-    def _exact_groups(self, padded: str) -> list[tuple[str, int]]:
-        """Return (group_id, alias_len) for every alias present as a whole phrase."""
-        return [(g.id, len(alias)) for g, alias in self.exact_group_hits(padded.strip())]
+    def _filter_nested_hits(self, hits: list[tuple[EntityRef, str]]
+                            ) -> list[tuple[EntityRef, str]]:
+        """Drop hits that are really one group seen twice: a group whose matched
+        alias is contained inside another hit's alias (e.g. 'NCT' in 'NCT Dream'),
+        or who is the parent group of another hit (sub-units win)."""
+        best: dict[str, tuple[EntityRef, str]] = {}
+        for g, a in hits:
+            cur = best.get(g.id)
+            if cur is None or len(a) > len(cur[1]):
+                best[g.id] = (g, a)
+        items = list(best.values())
+        out = []
+        for g, a in items:
+            drop = False
+            for g2, a2 in items:
+                if g2.id == g.id:
+                    continue
+                if len(a2) > len(a) and f" {a} " in f" {a2} ":
+                    drop = True
+                    break
+                if self.group_parent.get(g2.id) == g.id:
+                    drop = True
+                    break
+            if not drop:
+                out.append((g, a))
+        return out
 
     def match_group(self, norm_full: str) -> tuple[EntityRef | None, int, bool, list]:
         padded = f" {norm_full} "
@@ -120,17 +146,27 @@ class MatchIndex:
                 if g:
                     return g, 100, False, [(g, 100)]
 
-        # 2) exact whole-phrase alias matches.
-        exact = self._exact_groups(padded)
-        if exact:
-            # Prefer the most specific (longest) alias; detect genuine ties.
-            best_len = max(l for _, l in exact)
-            winners = sorted({gid for gid, l in exact if l == best_len})
-            cands = [(self.groups[g], 100) for g in winners if g in self.groups]
-            if len(winners) == 1:
-                return self.groups[winners[0]], 100, False, cands
-            # Ambiguous: multiple different groups matched equally.
-            return self.groups.get(winners[0]), 60, True, cands
+        # 2) exact whole-phrase alias matches. When several distinct groups hit
+        # (after dropping nested/sub-unit echoes), the one appearing EARLIEST in
+        # the filename wins — fancam names lead with the group, while later hits
+        # are usually song titles that happen to be group names (e.g. 'Secret').
+        all_hits = self.exact_group_hits(norm_full)
+        kept_ids = {g.id for g, _ in self._filter_nested_hits(all_hits)}
+        if kept_ids:
+            # Rank by each group's EARLIEST hit across all its aliases.
+            pos: dict[str, tuple[int, EntityRef]] = {}
+            for g, a in all_hits:
+                if g.id not in kept_ids:
+                    continue
+                p = padded.find(f" {a} ")
+                if g.id not in pos or p < pos[g.id][0]:
+                    pos[g.id] = (p, g)
+            ranked = sorted(pos.values(), key=lambda t: t[0])
+            cands = [(g, 100) for _p, g in ranked]
+            if len(ranked) == 1 or ranked[0][0] < ranked[1][0]:
+                return ranked[0][1], 100, False, cands
+            # Two different groups at the same spot (shared name) — ambiguous.
+            return ranked[0][1], 60, True, cands
 
         # 3) fuzzy fallback.
         if not self._g_alias_list:
@@ -215,13 +251,16 @@ class MatchIndex:
             res.reason = "no usable name in filename"
             return res
 
-        # Collab / multi-group: two+ *different* group names present by exact match
-        # -> Special Stages + replicate per group (plan.md §10). A single name that
-        # maps to several groups is "ambiguous", handled below, not a collab.
-        hits = self.exact_group_hits(norm_full)
+        # Collab / multi-group (plan.md §10): two+ *different* group names AND an
+        # explicit collab marker ('x', 'vs', 'feat', '합동'…). Song titles often
+        # contain words that double as group names (e.g. 'Secret Code' vs the
+        # group Secret), so a second name alone is NOT enough — Special Stages
+        # should be rare. Nested/sub-unit hits (NCT in NCT Dream) are filtered.
+        hits = self._filter_nested_hits(self.exact_group_hits(norm_full))
         distinct_gids = {g.id for g, _ in hits}
         distinct_aliases = {a for _, a in hits}
-        if len(distinct_gids) >= 2 and len(distinct_aliases) >= 2:
+        has_marker = any(t in COLLAB_MARKERS for t in tokens)
+        if len(distinct_gids) >= 2 and len(distinct_aliases) >= 2 and has_marker:
             seen: set[str] = set()
             groups: list[EntityRef] = []
             for g, _a in hits:

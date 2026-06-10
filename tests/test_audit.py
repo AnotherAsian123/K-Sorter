@@ -62,9 +62,19 @@ def test_flags_wrong_member(tmp_path):
     assert flags[0].member_id == "yoon"
 
 
-def test_special_stages_not_flagged(tmp_path):
-    _put(tmp_path, "_Special Stages", "STAYC x fromis_9 stage.mkv")
+def test_true_collab_in_special_stages_not_flagged(tmp_path):
+    _put(tmp_path, "_Special Stages", "STAYC x fromis_9 합동무대.mkv")
     assert list(audit.audit_destination(tmp_path)) == []
+
+
+def test_single_group_in_special_stages_flagged(tmp_path):
+    # A non-collab that landed in _Special Stages must be flagged for review.
+    _put(tmp_path, "_Special Stages", "STAYC Yoon fancam.mkv")
+    flags = list(audit.audit_destination(tmp_path))
+    assert len(flags) == 1
+    f = flags[0]
+    assert f.current_location == "_Special Stages"
+    assert f.group_id == "stayc" and f.member_id == "yoon"
 
 
 def test_unidentifiable_not_flagged(tmp_path):
