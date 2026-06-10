@@ -49,7 +49,7 @@
 
 /* ---------- base ---------- */
 * { box-sizing: border-box; }
-html { font-size: clamp(15px, 14px + 0.25vw, 17px); }
+html { font-size: clamp(15px, 14px + 0.25vw, 17px); scroll-behavior: smooth; }
 body {
   margin: 0;
   font-family: "Segoe UI", system-ui, -apple-system, "Apple SD Gothic Neo",
@@ -77,7 +77,11 @@ header.top {
   border-bottom: 1px solid var(--border);
 }
 .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.brand h1 { margin: 0; font-size: clamp(1.15rem, 1rem + 1vw, 1.5rem); letter-spacing: .4px; white-space: nowrap; }
+.brand h1 { margin: 0; font-size: clamp(1.15rem, 1rem + 1vw, 1.5rem); letter-spacing: .4px; white-space: nowrap;
+  background: linear-gradient(120deg, var(--text), var(--sage));
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme="dark"] .brand h1 { background: linear-gradient(120deg, var(--cream), var(--teal));
+  -webkit-background-clip: text; background-clip: text; }
 .brand .beat { color: var(--sage); display: inline-block; animation: beat 2.4s ease-in-out infinite; }
 @keyframes beat { 0%,100% { transform: scale(1); } 50% { transform: scale(1.18); } }
 .tagline { color: var(--muted); font-size: .8rem; margin: 0; }
@@ -217,7 +221,14 @@ details.options > summary:hover { background: color-mix(in srgb, var(--teal) 22%
   border-left: 3px solid var(--clay); }
 .item .meta { font-size: .8rem; color: var(--muted); margin: 4px 0 10px; }
 .item .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.item .controls input[type=text], .item .controls select { flex: 1 1 160px; width: auto; }
+/* min-width: 0 keeps option/text length from driving layout — widths stay
+   flex-determined, so changing dropdown contents can't cause a jump. Long
+   option text is ellipsized inside the stable box instead. */
+.item .controls input[type=text], .item .controls select {
+  flex: 1 1 170px; width: auto; min-width: 0; max-width: 100%;
+  text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
+  transition: border-color var(--speed), box-shadow var(--speed);
+}
 .online-box { border: 1px dashed var(--border); border-radius: var(--radius-sm);
   padding: 8px 12px; background: color-mix(in srgb, var(--teal) 10%, transparent); }
 .online-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: .86rem; flex-wrap: wrap; }
@@ -268,6 +279,52 @@ table.moves tr.undone td { opacity: .5; text-decoration: line-through; }
 .grow .gko { font-size: .8rem; }
 .gdetail .mrow { padding: 10px 12px; }
 .mrow .controls { gap: 6px; flex-wrap: wrap; }
+
+/* ---------- ambient background graphics ---------- */
+/* Minimalist palette blobs + drifting notes in the empty space around the
+   content. Pure CSS transforms (GPU-cheap), behind everything, decorative. */
+.ambient { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.ambient .blob { position: absolute; border-radius: 50%; opacity: .5; will-change: transform; }
+.ambient .b1 { width: 420px; height: 420px; top: -120px; right: -100px;
+  background: radial-gradient(circle at 35% 35%, color-mix(in srgb, var(--teal) 55%, transparent), transparent 68%);
+  animation: drift1 38s ease-in-out infinite alternate; }
+.ambient .b2 { width: 360px; height: 360px; bottom: -140px; left: -120px;
+  background: radial-gradient(circle at 60% 40%, color-mix(in srgb, var(--clay) 38%, transparent), transparent 70%);
+  animation: drift2 46s ease-in-out infinite alternate; }
+.ambient .b3 { width: 300px; height: 300px; top: 40%; left: -160px;
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--sage) 34%, transparent), transparent 70%);
+  animation: drift1 52s ease-in-out infinite alternate-reverse; }
+@keyframes drift1 { from { transform: translate(0, 0) scale(1); } to { transform: translate(-40px, 50px) scale(1.12); } }
+@keyframes drift2 { from { transform: translate(0, 0) scale(1); } to { transform: translate(60px, -40px) scale(1.08); } }
+.ambient .note { position: absolute; color: var(--sage); opacity: .18; user-select: none;
+  font-size: 30px; animation: floaty 14s ease-in-out infinite; will-change: transform; }
+[data-theme="dark"] .ambient .note { color: var(--teal); }
+.ambient .n1 { top: 22%; right: 7%; animation-delay: 0s; }
+.ambient .n2 { top: 58%; right: 12%; font-size: 22px; animation-delay: -5s; color: var(--clay); }
+.ambient .n3 { top: 78%; left: 8%; font-size: 26px; animation-delay: -9s; }
+@keyframes floaty {
+  0%, 100% { transform: translateY(0) rotate(-6deg); }
+  50%      { transform: translateY(-22px) rotate(8deg); }
+}
+
+/* ---------- scroll-driven reveals (sohub-style, zero JS) ---------- */
+@supports (animation-timeline: view()) {
+  .wrap > section.card {
+    animation: rise-in linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 38%;
+  }
+}
+@keyframes rise-in {
+  from { opacity: .3; translate: 0 26px; scale: .985; }
+  to   { opacity: 1;  translate: 0 0;    scale: 1; }
+}
+
+/* ---------- idle empty-state ---------- */
+.idle-hero { text-align: center; padding: 30px 16px 22px; }
+.idle-hero svg { display: block; margin: 0 auto 8px; color: var(--sage); opacity: .8;
+  animation: floaty 9s ease-in-out infinite; }
+[data-theme="dark"] .idle-hero svg { color: var(--teal); }
 
 /* ---------- misc ---------- */
 .muted { color: var(--muted); font-size: .85rem; }

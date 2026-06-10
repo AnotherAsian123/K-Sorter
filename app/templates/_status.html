@@ -86,6 +86,21 @@
 </div>
 {% endif %}
 
+{% if state.status == 'idle' and not running %}
+{# Calm empty state: nothing has run yet. #}
+<div class="idle-hero" aria-hidden="false">
+  <svg width="92" height="74" viewBox="0 0 92 74" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <rect x="4" y="16" width="68" height="50" rx="9" stroke="currentColor" stroke-width="3"/>
+    <path d="M4 25v-7a6 6 0 0 1 6-6h16l8 8" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+    <path d="M52 48V28l14-4v18" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="47" cy="49" r="5.5" stroke="currentColor" stroke-width="3"/>
+    <circle cx="61" cy="44" r="5.5" stroke="currentColor" stroke-width="3"/>
+    <path d="M80 12c2.8.8 5 3 5.8 5.8M84 4c4.6 1.3 8.3 5 9.6 9.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" opacity=".55"/>
+  </svg>
+  <p class="muted">All quiet. Pick your folders above and press <strong>Start sorting</strong> &mdash; the calm does the rest.</p>
+</div>
+{% endif %}
+
 {% if state.status != 'idle' %}
 <div class="card job">
   <h2 class="job-head">
