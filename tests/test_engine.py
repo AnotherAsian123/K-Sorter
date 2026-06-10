@@ -109,6 +109,14 @@ def test_collab_resolve_replicate(tmp_path):
     assert (dst / "ITZY" / "Group" / f.name).exists()
 
 
+def test_collab_resolve_all_groups_no_special(tmp_path):
+    mgr, item, f, dst = _collab_item(tmp_path / "allg")
+    assert mgr.resolve_collab(item.id, "groups")["ok"]
+    assert (dst / "TWICE" / "Group" / f.name).exists()
+    assert (dst / "ITZY" / "Group" / f.name).exists()
+    assert not (dst / "_Special Stages" / f.name).exists()
+
+
 def test_collab_resolve_special_only(tmp_path):
     mgr, item, f, dst = _collab_item(tmp_path / "sp")
     assert mgr.resolve_collab(item.id, "special")["ok"]

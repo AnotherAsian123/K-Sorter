@@ -243,7 +243,7 @@ class JobManager:
 
     def resolve_collab(self, item_id: str, action: str) -> dict:
         """Apply a user's decision for a multi-group video.
-        action: 'replicate' | 'special' | 'group:<group_id>'."""
+        action: 'replicate' | 'groups' | 'special' | 'group:<group_id>'."""
         st = self.state
         queue = idx = None
         for lst in (st.review, st.manual):
@@ -259,6 +259,20 @@ class JobManager:
 
         if action == "replicate":
             item.is_collab = True  # primary_dest + replica_dests already set
+        elif action == "groups":
+            # Copy into each named group's folder, but NOT Special Stages.
+            from .matcher import get_index
+            gi = get_index()
+            groups = [gi.groups.get(g["id"]) for g in item.collab_groups]
+            groups = [g for g in groups if g]
+            if len(groups) < 2:
+                return {"ok": False, "error": "Need at least two groups."}
+            item.is_collab = True
+            item.primary_dest = str(
+                dest_root / engine._name(groups[0], lang) / engine.GROUP_SUBFOLDER / item.filename)
+            item.replica_dests = [
+                str(dest_root / engine._name(g, lang) / engine.GROUP_SUBFOLDER / item.filename)
+                for g in groups[1:]]
         elif action == "special":
             item.is_collab = False
             item.replica_dests = []

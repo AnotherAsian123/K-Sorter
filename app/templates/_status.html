@@ -59,6 +59,9 @@
     <button class="btn small" hx-post="/resolve-collab" hx-target="#status" hx-swap="innerHTML"
             hx-vals='{"item_id": "{{ it.id }}", "action": "replicate"}'>
       &#10003; Special Stages + all groups</button>
+    <button class="btn teal small" hx-post="/resolve-collab" hx-target="#status" hx-swap="innerHTML"
+            hx-vals='{"item_id": "{{ it.id }}", "action": "groups"}'>
+      All groups (copy to each)</button>
     <button class="btn secondary small" hx-post="/resolve-collab" hx-target="#status" hx-swap="innerHTML"
             hx-vals='{"item_id": "{{ it.id }}", "action": "special"}'>
       Special Stages only</button>
