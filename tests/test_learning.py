@@ -82,6 +82,40 @@ def test_subunit_not_a_collab():
     assert r.group.id == "nctdream"
 
 
+def test_caption_slang_not_learnable():
+    assert not is_learnable_token("메롱")
+
+
+def test_unknown_hashtag_with_learned_only_evidence_goes_to_review():
+    # A learned (name-like) alias must not auto-sort a file whose hashtags name
+    # something the DB doesn't know (e.g. #Hearts2Hearts).
+    db.execute("INSERT OR IGNORE INTO aliases(entity_type,entity_id,alias,alias_raw)"
+               " VALUES('group','stayc','이안이','이안이')")
+    db.execute("INSERT OR REPLACE INTO corrections(pattern,entity_type,entity_id,group_id)"
+               " VALUES('이안이','group','stayc','stayc')")
+    matcher.reload_index()
+    try:
+        r = matcher.get_index().match("이안이 메롱 #Hearts2Hearts #IAN [yc12zblPle0]")
+        assert r.group and r.group.id == "stayc"   # suggested...
+        assert r.ambiguous and r.confidence == 0   # ...but never auto-sorted
+        assert "hashtag" in r.reason
+    finally:
+        db.execute("DELETE FROM corrections WHERE pattern='이안이'")
+        db.execute("DELETE FROM aliases WHERE alias='이안이'")
+        matcher.reload_index()
+
+
+def test_unknown_hashtag_with_real_name_still_confident():
+    # Explicit group name in the filename outweighs an odd fan hashtag.
+    r = matcher.get_index().match("STAYC comeback show #SwithLove")
+    assert r.group.id == "stayc" and not r.ambiguous and r.confidence >= 90
+
+
+def test_known_hashtags_are_fine():
+    r = matcher.get_index().match("#STAYC show stage")
+    assert r.group.id == "stayc" and not r.ambiguous
+
+
 def test_purge_cleans_existing_pollution():
     # Inject a previously-learned junk alias, confirm it pollutes, then purge.
     db.execute("INSERT OR IGNORE INTO aliases(entity_type,entity_id,alias,alias_raw)"

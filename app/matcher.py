@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from rapidfuzz import fuzz, process
 
 from . import database as db
-from .normalize import COLLAB_MARKERS, normalize, tokens_for_match
+from .normalize import COLLAB_MARKERS, TAG_IGNORE, hashtags, normalize, tokens_for_match
 
 # Below this fuzzy score we treat it as "no confident match" rather than guess.
 FUZZY_FLOOR = 65
@@ -95,6 +95,29 @@ class MatchIndex:
             for r in db.query(
                 "SELECT pattern, entity_type, entity_id, group_id FROM corrections")
         ]
+        # Learned group aliases (from corrections): weaker evidence than a real
+        # name — they don't count as "explicit" when unknown hashtags are present.
+        self.learned_group_aliases = {
+            (eid, pattern) for pattern, etype, eid, _gid in self.corrections
+            if etype == "group"
+        }
+
+        # Every known name in hashtag-friendly forms ("le sserafim" ->
+        # "lesserafim"), to recognise tags like #LE_SSERAFIM or #fromis_9.
+        self._known_tag_tokens: set[str] = set()
+        for alias in (*self.group_alias_to_ids, *self.member_alias_to_ids):
+            compact = alias.replace(" ", "")
+            self._known_tag_tokens.update({alias, compact, compact.replace("_", "")})
+
+    def _tag_known(self, tag: str) -> bool:
+        """Does this hashtag correspond to any known group/member name?"""
+        if {tag, tag.replace("_", " ").strip(), tag.replace("_", "")} \
+                & self._known_tag_tokens:
+            return True
+        # Compound tags like #스테이씨_윤: known if every part is known/generic.
+        parts = [p for p in tag.split("_") if p]
+        return bool(parts) and all(
+            p in self._known_tag_tokens or p in TAG_IGNORE for p in parts)
 
     # ---- group matching -------------------------------------------------
     def exact_group_hits(self, norm_full: str) -> list[tuple[EntityRef, str]]:
@@ -293,22 +316,37 @@ class MatchIndex:
         res.group_confidence = 0 if g_amb else g_score
         res.group_ambiguous = g_amb
 
-        if not is_solo:
-            res.confidence = 0 if g_amb else g_score
-            res.ambiguous = g_amb
-            res.reason = "group match" + (" (ambiguous)" if g_amb else "")
-            return res
+        # Hashtag guard: tags name the group/member, so an unrecognised tag
+        # (e.g. #Hearts2Hearts for a group not in the DB) means we may be
+        # looking at an unknown entity. Unless the matched group is backed by
+        # its REAL name in the filename (not just a learned alias or a fuzzy
+        # guess), never auto-sort — ask the user.
+        unknown_tags = [t for t in hashtags(filename_stem)
+                        if t not in TAG_IGNORE and not self._tag_known(t)]
+        explicit = any(h.id == g.id and (h.id, a) not in self.learned_group_aliases
+                       for h, a in all_hits)
+        tag_doubt = bool(unknown_tags) and not explicit
+        if tag_doubt:
+            res.group_ambiguous = True
 
-        # solo video -> also resolve member within the matched group.
-        m, m_score, m_amb, m_cands = self.match_member(norm_full, g.id)
-        res.member_candidates = m_cands
-        res.member = m
-        res.ambiguous = g_amb or m_amb or (m is None)
-        res.confidence = 0 if res.ambiguous else min(g_score, m_score)
-        if m is None:
-            res.reason = "group matched, member unresolved"
+        if not is_solo:
+            res.confidence = 0 if (g_amb or tag_doubt) else g_score
+            res.ambiguous = g_amb or tag_doubt
+            res.reason = "group match" + (" (ambiguous)" if g_amb else "")
         else:
-            res.reason = "group + member match" + (" (ambiguous)" if res.ambiguous else "")
+            # solo video -> also resolve member within the matched group.
+            m, m_score, m_amb, m_cands = self.match_member(norm_full, g.id)
+            res.member_candidates = m_cands
+            res.member = m
+            res.ambiguous = g_amb or m_amb or (m is None) or tag_doubt
+            res.confidence = 0 if res.ambiguous else min(g_score, m_score)
+            if m is None:
+                res.reason = "group matched, member unresolved"
+            else:
+                res.reason = "group + member match" + (" (ambiguous)" if res.ambiguous else "")
+        if tag_doubt:
+            res.reason = ("group uncertain — unrecognised hashtag(s): "
+                          + ", ".join("#" + t for t in unknown_tags))
         return res
 
 

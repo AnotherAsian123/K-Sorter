@@ -48,6 +48,14 @@ LEARN_STOP = {
     "셀카", "직찍", "안무", "안무영상", "커버", "라이브", "풀버전", "데뷔", "컴백",
     "음방", "인터뷰", "토크", "하이라이트", "축하공연", "공연", "모음", "현장",
     "직캠모음", "교차편집본", "응원법", "쇼케이스", "앵콜", "앙코르", "소속사",
+    # Caption slang / reaction words that sneak into titles
+    "메롱", "심쿵", "대박", "귀여워", "예뻐", "최애", "레전드",
+}
+
+# Hashtag-ish tokens that are generic, never a group/member name.
+TAG_IGNORE = FILLER | LEARN_STOP | SOLO_MARKERS | {
+    "kpop", "케이팝", "shorts", "쇼츠", "idol", "아이돌", "challenge", "챌린지",
+    "viral", "fyp", "tiktok", "틱톡", "youtube", "유튜브",
 }
 
 _DATE_RE = re.compile(
@@ -82,6 +90,15 @@ def normalize(text: str) -> str:
 def strip_dates(text: str) -> str:
     """Remove date-like tokens for matching only (the filename keeps its date)."""
     return _DATE_RE.sub(" ", text)
+
+
+_HASHTAG_RE = re.compile(r"#([0-9A-Za-z_가-힣]+)")
+
+
+def hashtags(filename_stem: str) -> list[str]:
+    """Normalized hashtag tokens from a filename. Hashtags almost always name
+    the group/member, so an unrecognised one is a strong 'unknown entity' hint."""
+    return [t for t in (normalize(m) for m in _HASHTAG_RE.findall(filename_stem)) if t]
 
 
 def tokens_for_match(filename_stem: str) -> tuple[list[str], bool]:

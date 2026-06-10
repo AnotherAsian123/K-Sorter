@@ -99,6 +99,17 @@ def _flag_member(vf, group: EntityRef, member: EntityRef, score: int,
     return item
 
 
+def _flag_hashtag(vf, current_group, member_folder, res, location) -> engine.PlanItem:
+    """File whose hashtags the database doesn't recognise — placement can't be
+    trusted (likely a group/member that isn't in the database yet)."""
+    item = _flag(vf, current_group, member_folder, res, location, "unrecognised hashtags")
+    item.help = ("This filename has hashtag(s) the database doesn't recognise — "
+                 "possibly a new group or member. Verify where it belongs: search "
+                 "or look the group up online and add it, then Confirm — or Skip "
+                 "to keep it here.")
+    return item
+
+
 def _flag_collab(vf, res, dest_root: Path, location: str) -> engine.PlanItem:
     """A multi-group filename needing a human decision: present the collab
     options (Special Stages + all groups / Special Stages only / one group)."""
@@ -152,6 +163,9 @@ def audit_destination(dest_root: str | Path,
                 if not res.collab_marker:
                     yield _flag_collab(vf, res, dest_root, location)
                 continue
+            if "hashtag" in res.reason and res.group:
+                yield _flag_hashtag(vf, None, None, res, location)
+                continue
             if (res.group and not res.group_ambiguous
                     and res.group_confidence >= settings.confirm_threshold):
                 yield _flag(vf, None, None, res, location, "single group, not a collab")
@@ -185,6 +199,12 @@ def audit_destination(dest_root: str | Path,
                 if (m and not m_amb and m_score >= settings.confirm_threshold
                         and _resolve_member_folder(member_folder, cg.id) != m.id):
                     yield _flag_member(vf, cg, m, m_score, location)
+            continue
+        # Unrecognised hashtags = the placement can't be trusted (the match may
+        # rest on a learned alias or a fuzzy guess) — ask the user.
+        if "hashtag" in res.reason and res.group:
+            yield _flag_hashtag(vf, _resolve_group_folder(top), member_folder,
+                                res, location)
             continue
         # Gate on GROUP certainty (a solo video with an unresolved member is
         # still a confident group match — we can verify the folder).

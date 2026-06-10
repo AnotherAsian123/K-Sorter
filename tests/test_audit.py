@@ -126,6 +126,26 @@ def test_unidentifiable_not_flagged(tmp_path):
     assert list(audit.audit_destination(tmp_path)) == []
 
 
+def test_unknown_hashtag_placement_flagged(tmp_path):
+    # A file placed via a learned alias whose hashtags name an unknown entity
+    # must be flagged wherever it sits.
+    db.execute("INSERT OR IGNORE INTO aliases(entity_type,entity_id,alias,alias_raw)"
+               " VALUES('group','stayc','이안이','이안이')")
+    db.execute("INSERT OR REPLACE INTO corrections(pattern,entity_type,entity_id,group_id)"
+               " VALUES('이안이','group','stayc','stayc')")
+    matcher.reload_index()
+    try:
+        _put(tmp_path, "STAYC", "Group", "이안이 메롱 #Hearts2Hearts #IAN.mkv")
+        flags = list(audit.audit_destination(tmp_path))
+        assert len(flags) == 1
+        assert "hashtag" in flags[0].reason
+        assert flags[0].current_location == "STAYC/Group"
+    finally:
+        db.execute("DELETE FROM corrections WHERE pattern='이안이'")
+        db.execute("DELETE FROM aliases WHERE alias='이안이'")
+        matcher.reload_index()
+
+
 def test_skipped_decision_persists(tmp_path):
     from app import engine
     from app.jobs import manager

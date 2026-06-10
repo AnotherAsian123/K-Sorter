@@ -176,6 +176,11 @@ def build_plan_item(vf: VideoFile, dest_root: Path) -> PlanItem:
     if status == "manual":
         item.help = ("We couldn't match a group from the filename. "
                      "Search the database below, or look the group up online.")
+    elif "hashtag" in res.reason:
+        item.help = ("This filename has hashtag(s) the database doesn't recognise "
+                     "— possibly a new group or member that isn't in the database "
+                     "yet. Search for the right group, or look it up online and "
+                     "add it, then Confirm.")
     elif res.ambiguous and len(item.group_candidates) > 1:
         item.help = "More than one group could match — pick the right one."
     elif res.is_solo and res.member is None and res.group:
