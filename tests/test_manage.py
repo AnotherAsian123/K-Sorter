@@ -43,3 +43,41 @@ def test_delete_group():
     assert manage.get_group(gid) is not None
     manage.delete_group(gid)
     assert manage.get_group(gid) is None
+
+
+def test_rename_group_migrates_folder(tmp_path):
+    # Renaming a group moves its existing sorted content under the new name.
+    db.set_meta("last_dest", str(tmp_path))
+    gid = enrich.add_confirmed_group("I'll-it", None)
+    old = tmp_path / "I'll-it" / "Group"
+    old.mkdir(parents=True)
+    (old / "v.mp4").write_bytes(b"x" * 64)
+    manage.rename_group(gid, "ILLIT", None)
+    assert (tmp_path / "ILLIT" / "Group" / "v.mp4").exists()
+    assert not (tmp_path / "I'll-it").exists()
+
+
+def test_rename_group_merges_into_existing_folder(tmp_path):
+    # New-name folder already has files (e.g. sorted after adding the alias):
+    # old content merges in, nothing is lost or overwritten.
+    db.set_meta("last_dest", str(tmp_path))
+    gid = enrich.add_confirmed_group("Old AAA", None)
+    old = tmp_path / "Old AAA" / "Group"; old.mkdir(parents=True)
+    (old / "a.mp4").write_bytes(b"a" * 64)
+    new = tmp_path / "New BBB" / "Group"; new.mkdir(parents=True)
+    (new / "b.mp4").write_bytes(b"b" * 64)
+    manage.rename_group(gid, "New BBB", None)
+    assert (new / "a.mp4").exists() and (new / "b.mp4").exists()
+    assert not (tmp_path / "Old AAA").exists()
+
+
+def test_rename_member_migrates_folder(tmp_path):
+    db.set_meta("last_dest", str(tmp_path))
+    gid = enrich.add_confirmed_group("MigGroup", None)
+    mid = enrich.add_member(gid, "Oldie")
+    old = tmp_path / "MigGroup" / "Oldie"
+    old.mkdir(parents=True)
+    (old / "fancam.mp4").write_bytes(b"m" * 64)
+    manage.rename_member(mid, "Newbie", None)
+    assert (tmp_path / "MigGroup" / "Newbie" / "fancam.mp4").exists()
+    assert not old.exists()

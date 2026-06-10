@@ -3,10 +3,19 @@
 All edits persist to SQLite and rebuild the match index. User edits to seed rows
 are kept on reseed only for user-created rows; renames/aliases on seed groups are
 additive (aliases) so they survive, and name edits persist until the next reseed.
+
+Renames also migrate already-sorted content: the old destination folder is moved
+under the new name (journaled, so it's undoable like any other move).
 """
 from __future__ import annotations
 
+import os
+import uuid
+from pathlib import Path
+
 from . import database as db
+from . import engine, mover
+from .config import settings
 from .logging_setup import get_logger
 from .matcher import reload_index
 from .normalize import normalize
@@ -19,6 +28,62 @@ def _add_alias(etype: str, eid: str, raw: str | None) -> None:
         db.execute(
             "INSERT OR IGNORE INTO aliases(entity_type, entity_id, alias, alias_raw)"
             " VALUES(?,?,?,?)", (etype, eid, normalize(raw), raw))
+
+
+# ---- rename folder migration ------------------------------------------------
+def _dest_root() -> Path | None:
+    """Best-known destination root: the /destination mount (env) or the last
+    destination a sort/audit ran against."""
+    cand = settings.dest_default or db.get_meta("last_dest", "") or ""
+    p = Path(cand) if cand else None
+    return p if (p and p.is_dir()) else None
+
+
+def _display(name: str | None, name_ko: str | None) -> str:
+    lang, _template = engine.get_naming()
+    return (name_ko if (lang == "ko" and name_ko) else name) or ""
+
+
+def _migrate_dir(old_dir: Path, new_dir: Path, group_label: str) -> int:
+    """Move everything under old_dir to new_dir (rename-fast when possible,
+    per-file merge otherwise). Returns number of journal entries written."""
+    if old_dir == new_dir or not old_dir.is_dir():
+        return 0
+    batch = "rename-" + uuid.uuid4().hex[:8]
+
+    # Fast path: target doesn't exist yet -> rename the whole tree at once.
+    if not new_dir.exists():
+        try:
+            new_dir.parent.mkdir(parents=True, exist_ok=True)
+            os.rename(old_dir, new_dir)
+            engine._journal(batch, str(old_dir), str(new_dir), "move", "rename",
+                            old_dir.name, group_label, None)
+            log.info("RENAME migrate: %s -> %s", old_dir, new_dir)
+            return 1
+        except OSError:
+            pass  # cross-device or other -> fall through to per-file merge
+
+    moved = 0
+    for f in sorted(p for p in old_dir.rglob("*") if p.is_file()):
+        rel = f.relative_to(old_dir)
+        res = mover.safe_move(f, new_dir / rel)
+        if res.status == "moved" and res.method != "noop":
+            engine._journal(batch, str(f), res.dest,
+                            "dedupe" if res.method == "dedupe" else "move",
+                            res.method, f.name, group_label, None)
+            moved += 1
+    # Tidy now-empty directories left behind.
+    for d in sorted((p for p in old_dir.rglob("*") if p.is_dir()), reverse=True):
+        try:
+            d.rmdir()
+        except OSError:
+            pass
+    try:
+        old_dir.rmdir()
+    except OSError:
+        pass
+    log.info("RENAME migrate (merge): %s -> %s, %d file(s)", old_dir, new_dir, moved)
+    return moved
 
 
 # ---- read -----------------------------------------------------------------
@@ -55,11 +120,19 @@ def get_group(gid: str) -> dict | None:
 
 # ---- group edits ----------------------------------------------------------
 def rename_group(gid: str, name: str, name_ko: str | None) -> None:
+    old = db.query_one("SELECT name, name_ko FROM groups WHERE id=?", (gid,))
     db.execute("UPDATE groups SET name=?, name_ko=? WHERE id=?",
                (name.strip(), (name_ko or "").strip() or None, gid))
     _add_alias("group", gid, name)
     _add_alias("group", gid, name_ko)
     reload_index()
+    # Migrate already-sorted content to the new folder name.
+    root = _dest_root()
+    if old and root:
+        old_disp = mover.sanitize_component(_display(old["name"], old["name_ko"]))
+        new_disp = mover.sanitize_component(_display(name, name_ko))
+        if old_disp and new_disp and old_disp != new_disp:
+            _migrate_dir(root / old_disp, root / new_disp, name.strip())
 
 
 def add_group_alias(gid: str, alias: str) -> None:
@@ -82,11 +155,25 @@ def delete_group(gid: str) -> None:
 
 # ---- member edits ---------------------------------------------------------
 def rename_member(mid: str, name: str, name_ko: str | None) -> None:
+    old = db.query_one("SELECT stage_name, stage_name_ko FROM members WHERE id=?", (mid,))
     db.execute("UPDATE members SET stage_name=?, stage_name_ko=? WHERE id=?",
                (name.strip(), (name_ko or "").strip() or None, mid))
     _add_alias("member", mid, name)
     _add_alias("member", mid, name_ko)
     reload_index()
+    # Migrate the member's folder inside every group they belong to.
+    root = _dest_root()
+    if old and root:
+        old_disp = mover.sanitize_component(_display(old["stage_name"], old["stage_name_ko"]))
+        new_disp = mover.sanitize_component(_display(name, name_ko))
+        if old_disp and new_disp and old_disp != new_disp:
+            for r in db.query(
+                    "SELECT g.name, g.name_ko FROM group_members gm "
+                    "JOIN groups g ON g.id = gm.group_id WHERE gm.member_id=?", (mid,)):
+                gdisp = mover.sanitize_component(_display(r["name"], r["name_ko"]))
+                if gdisp:
+                    _migrate_dir(root / gdisp / old_disp, root / gdisp / new_disp,
+                                 r["name"])
 
 
 def set_member_current(gid: str, mid: str, current: bool) -> None:

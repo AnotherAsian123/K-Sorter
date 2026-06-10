@@ -10,6 +10,7 @@ import threading
 import uuid
 from pathlib import Path
 
+from . import database as db
 from . import duplicates, engine
 from .config import settings
 from .logging_setup import get_logger
@@ -80,6 +81,7 @@ class JobManager:
         st.source, st.dest, st.apply = source, dest, apply
         st.status = "scanning"
         st.message = "Starting…"
+        db.set_meta("last_dest", dest)   # lets renames find sorted content later
         self.state = st
         self._thread = threading.Thread(
             target=self._run, args=(st,), daemon=True, name="ksorter-sort")
@@ -96,6 +98,7 @@ class JobManager:
         st.mode = "audit"
         st.status = "scanning"
         st.message = "Checking the sorted folder…"
+        db.set_meta("last_dest", dest)
         self.state = st
         self._thread = threading.Thread(
             target=self._run_audit, args=(st,), daemon=True, name="ksorter-audit")
