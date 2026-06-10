@@ -24,32 +24,55 @@ _WIKI = "https://en.wikipedia.org/w/api.php"
 _UA = "K-Sorter/1.0 (https://github.com/AnotherAsian123/K-Sorter; self-hosted k-pop sorter)"
 
 
-def search_group(name: str) -> list[dict]:
-    """Return candidate matches (title, snippet, url) for a possible group name."""
+def _wiki_search(query: str, limit: int = 6) -> list[dict]:
     try:
         resp = httpx.get(_WIKI, params={
             "action": "query", "list": "search", "format": "json",
-            "srlimit": 5, "srsearch": f"{name} kpop group",
+            "srlimit": limit, "srsearch": query,
         }, timeout=20, headers={
-            "User-Agent": _UA,
-            "Accept": "application/json",
-            "Api-User-Agent": _UA,
+            "User-Agent": _UA, "Accept": "application/json", "Api-User-Agent": _UA,
         })
         resp.raise_for_status()
-        results = resp.json().get("query", {}).get("search", [])
+        return resp.json().get("query", {}).get("search", [])
     except (httpx.HTTPError, ValueError) as exc:
-        log.warning("Wikipedia lookup failed for %r: %s", name, exc)
+        log.warning("Wikipedia search failed for %r: %s", query, exc)
         return []
-    out = []
-    for r in results:
-        title = r.get("title", "")
-        snippet = (r.get("snippet", "") or "").replace("<span class=\"searchmatch\">", "").replace("</span>", "")
-        out.append({
-            "title": title,
-            "snippet": snippet,
-            "url": f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
-        })
-    log.info("Enrich lookup %r -> %d candidates", name, len(out))
+
+
+def search_group(name: str) -> list[dict]:
+    """Return candidate matches (title, snippet, url) for a possible group name.
+
+    Searches the bare name AND a k-pop-biased query, then ranks by how closely
+    each title matches the name. Appending 'kpop group' alone wrecks relevance
+    for compound names (e.g. 'Hearts2Hearts'), so the bare name is essential."""
+    nq = normalize(name).replace(" ", "")
+    seen: dict[str, dict] = {}
+    for query in (name, f"{name} kpop group"):
+        for r in _wiki_search(query):
+            title = r.get("title", "")
+            if not title or title in seen:
+                continue
+            tnorm = normalize(title).replace(" ", "")
+            # Score: exact > prefix/contains > name-inside-parens > other.
+            if tnorm == nq:
+                score = 4
+            elif tnorm.startswith(nq) or nq in tnorm:
+                score = 3
+            elif nq and nq in normalize(r.get("snippet", "")).replace(" ", ""):
+                score = 1
+            else:
+                score = 0
+            snippet = (r.get("snippet", "") or "").replace(
+                "<span class=\"searchmatch\">", "").replace("</span>", "")
+            seen[title] = {
+                "title": title, "snippet": snippet, "score": score,
+                "url": f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+            }
+    out = sorted(seen.values(), key=lambda c: -c["score"])[:5]
+    for c in out:
+        c.pop("score", None)
+    log.info("Enrich lookup %r -> %d candidates (top: %s)",
+             name, len(out), out[0]["title"] if out else "—")
     return out
 
 
