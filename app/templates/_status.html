@@ -50,6 +50,7 @@
 {% macro collab_resolver(it) %}
 <div class="item">
   <div class="fname">{{ it.filename }}</div>
+  {% if it.current_location %}<div class="meta">Currently filed under: <strong>{{ it.current_location }}</strong></div>{% endif %}
   <div class="why">{{ it.help }}</div>
   <div class="meta">Detected groups:
     {% for g in it.collab_groups %}<strong>{{ g.name }}</strong>{% if not loop.last %} + {% endif %}{% endfor %}

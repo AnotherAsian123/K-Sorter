@@ -138,6 +138,13 @@ def safe_move(src: Path, dest: Path, verify_checksum: bool = False) -> MoveResul
     src, dest = Path(src), Path(dest)
     if not src.exists():
         return MoveResult("error", reason="source disappeared")
+    # Already in place? A no-op — and it MUST be caught before the dedupe check
+    # below, which would otherwise see "identical file at dest" and delete it.
+    try:
+        if src.resolve() == dest.resolve():
+            return MoveResult("moved", method="noop", dest=str(dest))
+    except OSError:
+        pass
     if dest.exists():
         # If the destination already holds the SAME file, the source is a
         # redundant copy in the wrong place — remove it (the move is effectively

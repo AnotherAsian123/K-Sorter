@@ -41,6 +41,16 @@ def test_cross_mount_falls_back_to_hardlink(tmp_path, monkeypatch):
     assert dest.read_bytes() == b"y" * 2048
 
 
+def test_same_path_is_noop_not_delete(tmp_path):
+    # Regression: resolving a file to its CURRENT location must be a no-op —
+    # the dedupe branch would otherwise see "identical file" and delete it.
+    f = tmp_path / "v.mp4"
+    f.write_bytes(b"precious" * 512)
+    r = mover.safe_move(f, f)
+    assert r.status == "moved" and r.method == "noop"
+    assert f.exists() and f.read_bytes() == b"precious" * 512
+
+
 def test_dedupe_when_same_file_at_dest(tmp_path):
     # The destination already holds an IDENTICAL copy -> remove the redundant
     # source instead of skipping (so corrections actually take effect).

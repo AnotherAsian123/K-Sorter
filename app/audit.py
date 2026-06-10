@@ -74,6 +74,33 @@ def _flag(vf, current_group, member_folder, res, location, reason) -> engine.Pla
     return item
 
 
+def _flag_collab(vf, res, dest_root: Path, location: str) -> engine.PlanItem:
+    """A multi-group filename needing a human decision: present the collab
+    options (Special Stages + all groups / Special Stages only / one group)."""
+    lang, _template = engine.get_naming()
+    item = engine.PlanItem(
+        id=uuid.uuid4().hex[:12],
+        source=str(vf.path),
+        filename=vf.path.name,
+        status="confirm",
+        confidence=res.confidence,
+        reason="multiple group names — needs your decision",
+        is_collab=True,
+        group_name=" + ".join(g.name for g in res.groups),
+        collab_groups=[{"id": g.id, "name": g.name} for g in res.groups],
+        primary_dest=str(dest_root / engine.SPECIAL_STAGES / vf.path.name),
+        replica_dests=[
+            str(dest_root / engine._name(g, lang) / engine.GROUP_SUBFOLDER / vf.path.name)
+            for g in res.groups
+        ],
+        current_location=location,
+    )
+    item.help = ("Multiple group names in this filename with no collab marker — "
+                 "decide: Special Stages (with or without copies in each group), "
+                 "or file it under one group. Skip keeps it where it is.")
+    return item
+
+
 def audit_destination(dest_root: str | Path,
                       on_scan: Callable[[], None] | None = None) -> Iterator[engine.PlanItem]:
     dest_root = Path(dest_root)
@@ -89,14 +116,18 @@ def audit_destination(dest_root: str | Path,
             continue
         top = parts[0]
 
-        # _Special Stages: should be rare. If the filename now resolves to a
-        # single confident group (not a collab), it was misfiled — flag it.
+        # _Special Stages: should be rare. Marked collabs belong here; anything
+        # else is offered back to the user for a decision.
         if top == engine.SPECIAL_STAGES:
             location = engine.SPECIAL_STAGES
             if engine.get_decision(vf.path.name) == location:
                 continue
             res = idx.match(vf.stem)
-            if (res.group and not res.is_collab and not res.group_ambiguous
+            if res.is_collab:
+                if not res.collab_marker:
+                    yield _flag_collab(vf, res, dest_root, location)
+                continue
+            if (res.group and not res.group_ambiguous
                     and res.group_confidence >= settings.confirm_threshold):
                 yield _flag(vf, None, None, res, location, "single group, not a collab")
             continue
@@ -110,9 +141,17 @@ def audit_destination(dest_root: str | Path,
             continue
 
         res = idx.match(vf.stem)
+        if res.is_collab:
+            # If this folder is one of the named groups (or it's a marked,
+            # genuine collab) it's a plausible home — leave it. Otherwise the
+            # file sits under an unrelated group: ask the user.
+            cg = _resolve_group_folder(top)
+            if not res.collab_marker and not (cg and any(g.id == cg.id for g in res.groups)):
+                yield _flag_collab(vf, res, dest_root, location)
+            continue
         # Gate on GROUP certainty (a solo video with an unresolved member is
         # still a confident group match — we can verify the folder).
-        if not res.group or res.is_collab or res.group_ambiguous:
+        if not res.group or res.group_ambiguous:
             continue
         if res.group_confidence < settings.confirm_threshold:
             continue

@@ -40,6 +40,7 @@ class MatchResult:
     group_confidence: int = 0
     group_ambiguous: bool = False
     is_collab: bool = False
+    collab_marker: bool = False   # explicit 'x'/'feat'/'합동'… marker present
     groups: list[EntityRef] = field(default_factory=list)   # all groups for a collab
     group_candidates: list[tuple[EntityRef, int]] = field(default_factory=list)
     member_candidates: list[tuple[EntityRef, int]] = field(default_factory=list)
@@ -251,27 +252,36 @@ class MatchIndex:
             res.reason = "no usable name in filename"
             return res
 
-        # Collab / multi-group (plan.md §10): two+ *different* group names AND an
-        # explicit collab marker ('x', 'vs', 'feat', '합동'…). Song titles often
-        # contain words that double as group names (e.g. 'Secret Code' vs the
-        # group Secret), so a second name alone is NOT enough — Special Stages
-        # should be rare. Nested/sub-unit hits (NCT in NCT Dream) are filtered.
-        hits = self._filter_nested_hits(self.exact_group_hits(norm_full))
+        # Multi-group (plan.md §10): two+ *different* group names present (after
+        # dropping nested/sub-unit echoes like NCT in NCT Dream). These are NEVER
+        # auto-applied — the user decides. We record whether an explicit collab
+        # marker ('x', 'vs', 'feat', '합동'…) was present: without one it is often
+        # a song title that doubles as a group name (e.g. 'Secret Code' vs the
+        # group Secret), so the review options matter even more.
+        all_hits = self.exact_group_hits(norm_full)
+        hits = self._filter_nested_hits(all_hits)
         distinct_gids = {g.id for g, _ in hits}
         distinct_aliases = {a for _, a in hits}
-        has_marker = any(t in COLLAB_MARKERS for t in tokens)
-        if len(distinct_gids) >= 2 and len(distinct_aliases) >= 2 and has_marker:
-            seen: set[str] = set()
-            groups: list[EntityRef] = []
-            for g, _a in hits:
-                if g.id not in seen:
-                    seen.add(g.id)
-                    groups.append(g)
+        if len(distinct_gids) >= 2 and len(distinct_aliases) >= 2:
+            has_marker = any(t in COLLAB_MARKERS for t in tokens)
+            padded = f" {norm_full} "
+            # Rank by each surviving group's EARLIEST hit across ALL its aliases.
+            first_pos: dict[str, tuple[int, EntityRef]] = {}
+            for g, a in all_hits:
+                if g.id not in distinct_gids:
+                    continue
+                p = padded.find(f" {a} ")
+                if g.id not in first_pos or p < first_pos[g.id][0]:
+                    first_pos[g.id] = (p, g)
+            # Order by first appearance — the leading group is the likeliest home.
+            groups = [g for _p, g in sorted(first_pos.values(), key=lambda t: t[0])]
             res.is_collab = True
+            res.collab_marker = has_marker
             res.groups = groups
             res.group = groups[0]
-            res.confidence = 100
-            res.reason = f"multi-group collab ({len(groups)} groups)"
+            res.confidence = 100 if has_marker else 50
+            res.reason = (f"multi-group collab ({len(groups)} groups)" if has_marker
+                          else f"{len(groups)} group names, no collab marker")
             return res
 
         g, g_score, g_amb, g_cands = self.match_group(norm_full)

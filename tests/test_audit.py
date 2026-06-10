@@ -77,6 +77,32 @@ def test_single_group_in_special_stages_flagged(tmp_path):
     assert f.group_id == "stayc" and f.member_id == "yoon"
 
 
+def test_markerless_multigroup_in_special_stages_offers_options(tmp_path):
+    # Two group names, no collab marker -> review with the collab options.
+    _put(tmp_path, "_Special Stages", "STAYC fromis_9 mention.mkv")
+    flags = list(audit.audit_destination(tmp_path))
+    assert len(flags) == 1
+    f = flags[0]
+    assert f.is_collab
+    assert {g["id"] for g in f.collab_groups} == {"stayc", "fromis"}
+    assert f.current_location == "_Special Stages"
+
+
+def test_markerless_multigroup_in_named_group_left_alone(tmp_path):
+    # Sitting under one of the named groups is a plausible home -> not flagged.
+    _put(tmp_path, "STAYC", "Group", "STAYC fromis_9 mention.mkv")
+    assert list(audit.audit_destination(tmp_path)) == []
+
+
+def test_markerless_multigroup_in_unrelated_group_flagged(tmp_path):
+    # Sitting under a folder that is NONE of the named groups -> needs a decision.
+    _put(tmp_path, "Weeekly", "Group", "STAYC fromis_9 mention.mkv")
+    flags = list(audit.audit_destination(tmp_path))
+    assert len(flags) == 1
+    assert flags[0].is_collab
+    assert flags[0].current_location == "Weeekly/Group"
+
+
 def test_unidentifiable_not_flagged(tmp_path):
     _put(tmp_path, "STAYC", "Group", "random home clip.mkv")
     assert list(audit.audit_destination(tmp_path)) == []

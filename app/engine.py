@@ -140,9 +140,15 @@ def build_plan_item(vf: VideoFile, dest_root: Path) -> PlanItem:
     if res.is_collab:
         item.group_name = " + ".join(g.name for g in res.groups)
         item.collab_groups = [{"id": g.id, "name": g.name} for g in res.groups]
-        item.help = ("Multiple groups detected — you decide: file into Special "
-                     "Stages and copy to every group, Special Stages only, or just "
-                     "one group.")
+        if res.collab_marker:
+            item.help = ("Multiple groups detected — you decide: file into Special "
+                         "Stages and copy to every group, Special Stages only, or "
+                         "just one group.")
+        else:
+            item.help = ("Multiple group names appear in this filename, but no "
+                         "collab marker ('x', 'feat', '합동'…) — it may be a real "
+                         "collab, or a song title that matches a group's name. "
+                         "Choose where it belongs.")
         # Pre-compute the "replicate everywhere" destinations (used if chosen).
         item.primary_dest = str(dest_root / SPECIAL_STAGES / vf.path.name)
         item.replica_dests = [
@@ -190,9 +196,10 @@ def apply_item(item: PlanItem, batch_id: str) -> dict:
                                   settings.verify_checksum)
         if primary.status != "moved":
             return {"id": item.id, "status": primary.status, "reason": primary.reason}
-        _journal(batch_id, item.source, primary.dest,
-                 "dedupe" if primary.method == "dedupe" else "move", primary.method,
-                 item.filename, item.group_name, None)
+        if primary.method != "noop":   # already in place -> nothing to undo
+            _journal(batch_id, item.source, primary.dest,
+                     "dedupe" if primary.method == "dedupe" else "move", primary.method,
+                     item.filename, item.group_name, None)
         for rep in item.replica_dests:
             r = mover.replicate(Path(primary.dest), Path(rep))
             if r.status == "moved":
@@ -205,7 +212,7 @@ def apply_item(item: PlanItem, batch_id: str) -> dict:
         return {"id": item.id, "status": "error", "reason": "no destination resolved"}
     result = mover.safe_move(Path(item.source), Path(item.primary_dest),
                              settings.verify_checksum)
-    if result.status == "moved":
+    if result.status == "moved" and result.method != "noop":
         _journal(batch_id, item.source, result.dest,
                  "dedupe" if result.method == "dedupe" else "move", result.method,
                  item.filename, item.group_name, item.member_name)

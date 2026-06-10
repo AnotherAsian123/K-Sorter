@@ -47,24 +47,26 @@ def test_title_dump_does_not_pollute_then_collab():
     assert r.group.id == "stayc"
 
 
-def test_song_title_group_name_is_not_a_collab():
-    # 'Secret Code' in a song title must not pair with the group Secret.
+def test_song_title_group_name_goes_to_review():
+    # 'Secret Code' in a song title pairs with the group Secret -> multi-group,
+    # NO marker -> flagged for the user's decision, never auto-applied. The
+    # leading group (STAYC) is listed first.
     db.execute("INSERT OR REPLACE INTO groups(id,name,is_active) VALUES('secret','Secret',1)")
     _alias("group", "secret", "Secret")
     matcher.reload_index()
     r = matcher.get_index().match(
         "240705 스테이씨 'Feel Good (Secret Code)' 직캠 (STAYC FanCam)")
-    assert not r.is_collab
-    assert r.group.id == "stayc"
+    assert r.is_collab and not r.collab_marker
+    assert [g.id for g in r.groups] == ["stayc", "secret"]
 
 
-def test_collab_requires_marker():
-    # Two real group names but no collab marker -> best single group, not collab.
+def test_marker_distinguishes_real_collabs():
+    # No marker -> still reviewed, but flagged as marker-less.
     r = matcher.get_index().match("스테이씨 fromis_9 mention")
-    assert not r.is_collab
-    # With an explicit marker it IS a collab.
+    assert r.is_collab and not r.collab_marker
+    # With an explicit marker it's a marked collab.
     r2 = matcher.get_index().match("STAYC x fromis_9 합동무대")
-    assert r2.is_collab
+    assert r2.is_collab and r2.collab_marker
 
 
 def test_subunit_not_a_collab():
