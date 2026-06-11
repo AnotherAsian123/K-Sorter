@@ -68,6 +68,17 @@ def search_group(name: str) -> list[dict]:
                 "title": title, "snippet": snippet, "score": score,
                 "url": f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
             }
+    # No name-matching Wikipedia hit? Wikidata covers entities without their
+    # own article (sub-units, very new groups) — offer those too.
+    if not any(c["score"] >= 3 for c in seen.values()):
+        for e in _search_wikidata_entities(name):
+            title = e["label"]
+            if not title or title in seen:
+                continue
+            seen[title] = {
+                "title": title, "snippet": e["description"], "score": 2,
+                "url": f"https://www.wikidata.org/wiki/{e['id']}",
+            }
     out = sorted(seen.values(), key=lambda c: -c["score"])[:5]
     for c in out:
         c.pop("score", None)
@@ -154,6 +165,23 @@ def _clean_label(s: str) -> str:
     return re.sub(r"\s*\([^)]*\)", "", s or "").strip()
 
 
+def _search_wikidata_entities(name: str) -> list[dict]:
+    """Entity search directly on Wikidata — finds groups/sub-units that have
+    no Wikipedia article of their own. Returns [{id, label, description}]."""
+    try:
+        r = httpx.get(_WIKIDATA, params={
+            "action": "wbsearchentities", "search": name, "language": "en",
+            "type": "item", "limit": 5, "format": "json",
+        }, timeout=15, headers={"User-Agent": _UA, "Api-User-Agent": _UA})
+        r.raise_for_status()
+        return [{"id": e["id"], "label": e.get("label", ""),
+                 "description": e.get("description", "")}
+                for e in r.json().get("search", [])]
+    except (httpx.HTTPError, ValueError) as exc:
+        log.warning("Wikidata entity search failed for %r: %s", name, exc)
+        return []
+
+
 def _members_from_wikidata(title: str) -> list[dict]:
     """Members via the group's Wikidata entity (P527 'has part'). This is the
     reliable source for big groups whose member list lives in the infobox,
@@ -169,6 +197,15 @@ def _members_from_wikidata(title: str) -> list[dict]:
         qid = page.get("pageprops", {}).get("wikibase_item")
         if not qid:
             return []
+        return _members_from_qid(qid)
+    except (httpx.HTTPError, ValueError) as exc:
+        log.warning("Wikidata members lookup failed for %r: %s", title, exc)
+        return []
+
+
+def _members_from_qid(qid: str) -> list[dict]:
+    headers = {"User-Agent": _UA, "Api-User-Agent": _UA}
+    try:
         r2 = httpx.get(_WIKIDATA, params={
             "action": "wbgetentities", "ids": qid, "props": "claims", "format": "json",
         }, timeout=15, headers=headers)
@@ -189,7 +226,7 @@ def _members_from_wikidata(title: str) -> list[dict]:
         r3.raise_for_status()
         entities = r3.json().get("entities", {})
     except (httpx.HTTPError, ValueError) as exc:
-        log.warning("Wikidata members lookup failed for %r: %s", title, exc)
+        log.warning("Wikidata members lookup failed for %s: %s", qid, exc)
         return []
 
     out = []
@@ -238,6 +275,15 @@ def lookup_group_members(group_name: str) -> list[dict]:
             log.info("Members lookup %r (%s) -> %d member(s)",
                      group_name, title, len(members))
             return members
+    # No article worked — try Wikidata's own entity search (covers groups and
+    # sub-units that never got a Wikipedia page).
+    for e in _search_wikidata_entities(group_name):
+        if nq in normalize(e["label"]).replace(" ", ""):
+            members = _members_from_qid(e["id"])
+            if members:
+                log.info("Members lookup %r (wikidata %s) -> %d member(s)",
+                         group_name, e["id"], len(members))
+                return members
     return []
 
 

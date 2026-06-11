@@ -139,7 +139,7 @@ document.addEventListener("alpine:init", () => {
     groupId: presetGroupId || ((groupCands && groupCands[0]) ? groupCands[0].id : ""),
     memberId: "",
     q: "", online: [], busy: false, lookupBusy: false, addBusy: false,
-    newMember: suggestedMember || "",
+    newMember: suggestedMember || "", showOther: false,
     init() {
       // Whenever the group changes (search, dropdown, or online-add), pull that
       // group's members automatically — no separate member lookup needed.
@@ -206,8 +206,14 @@ document.addEventListener("alpine:init", () => {
       try {
         const r = await postForm("/enrich/search", { name: term });
         const list = await r.json();
-        this.online = list.length ? list
-          : [{ title: "No results — try a different spelling or the Korean name.", url: "#", _none: true }];
+        this.online = list.length ? [...list]
+          : [{ title: "Not found online — small sub-units often have no page.", url: "#", _none: true }];
+        // No result actually MATCHES the typed name (e.g. RAINBOW18 only
+        // surfaces related pages)? Offer adding it manually.
+        const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9가-힣]/g, "");
+        if (!list.some((c) => norm(c.title).includes(norm(term)))) {
+          this.online.push({ title: term, url: "", _manual: true });
+        }
       } catch (e) {
         this.online = [{ title: "Lookup failed — the server may have no internet access (see the log file).", url: "#", _none: true }];
       } finally {

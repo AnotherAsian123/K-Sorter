@@ -3,18 +3,10 @@
 <div hx-get="/status" hx-trigger="every 1s" hx-target="#status" hx-swap="morph:innerHTML"></div>
 {% endif %}
 
-{# One resolver used by BOTH queues: candidate quick-picks + free search + online
-   lookup, so the correct group is always reachable even if it isn't suggested. #}
-{% macro resolver(it) %}
-{# Stable id: idiomorph matches by id, so resolving one item never morphs a
-   neighbour's markup onto this node (which wiped Alpine-rendered text). The
-   view-transition-name lets the remaining items glide up smoothly. #}
-<div class="item" id="item-{{ it.id }}" style="view-transition-name: vt-{{ it.id }}"
-     x-data='resolveItem("{{ it.id }}", {{ it.group_candidates|tojson }}, {{ it.member_candidates|tojson }}, "{{ it.group_id or "" }}", {{ (it.suggested_member or "")|tojson }})'>
-  <div class="fname">{{ it.filename }}</div>
-  {% if it.current_location %}<div class="meta">Currently filed under: <strong>{{ it.current_location }}</strong></div>{% endif %}
-  <div class="why">{{ it.help or it.reason }}</div>
-  {% if it.confidence %}<div class="meta">best guess confidence {{ it.confidence }}%</div>{% endif %}
+{# The resolver controls (fields + actions + online lookup). Lives inside an
+   Alpine resolveItem() scope — used by the standard resolver AND embedded in
+   the collab panel's "pick a different group" escape hatch. #}
+{% macro resolver_body(it) %}
   <div class="controls fields">
     <select x-model="groupId" title="Group">
       <option value="">&mdash; pick group &mdash;</option>
@@ -48,7 +40,8 @@
       <div class="online-row">
         <span x-show="o._loading" class="spinner-sm" aria-hidden="true"></span>
         <span x-show="o._loading || o._none" x-text="o.title" class="muted"></span>
-        <a x-show="!o._loading && !o._none" :href="o.url" target="_blank" x-text="o.title"></a>
+        <span x-show="o._manual" class="fname" x-text="'&ldquo;' + o.title + '&rdquo;'"></span>
+        <a x-show="!o._loading && !o._none && !o._manual" :href="o.url" target="_blank" x-text="o.title"></a>
         <button class="btn small" x-show="!o._loading && !o._none" @click="addOnline(o)"
                 :disabled="addBusy">
           <span x-show="!addBusy">+ Add as new group</span>
@@ -57,6 +50,21 @@
       </div>
     </template>
   </div>
+{% endmacro %}
+
+{# One resolver used by BOTH queues: candidate quick-picks + free search + online
+   lookup, so the correct group is always reachable even if it isn't suggested. #}
+{% macro resolver(it) %}
+{# Stable id: idiomorph matches by id, so resolving one item never morphs a
+   neighbour's markup onto this node (which wiped Alpine-rendered text). The
+   view-transition-name lets the remaining items glide up smoothly. #}
+<div class="item" id="item-{{ it.id }}" style="view-transition-name: vt-{{ it.id }}"
+     x-data='resolveItem("{{ it.id }}", {{ it.group_candidates|tojson }}, {{ it.member_candidates|tojson }}, "{{ it.group_id or "" }}", {{ (it.suggested_member or "")|tojson }})'>
+  <div class="fname">{{ it.filename }}</div>
+  {% if it.current_location %}<div class="meta">Currently filed under: <strong>{{ it.current_location }}</strong></div>{% endif %}
+  <div class="why">{{ it.help or it.reason }}</div>
+  {% if it.confidence %}<div class="meta">best guess confidence {{ it.confidence }}%</div>{% endif %}
+  {{ resolver_body(it) }}
 </div>
 {% endmacro %}
 
@@ -87,6 +95,15 @@
     {% endfor %}
     <button class="btn secondary small" hx-post="/skip" hx-target="#status" hx-swap="morph:innerHTML transition:true"
             hx-vals='{"item_id": "{{ it.id }}"}'>Skip</button>
+  </div>
+  {# Escape hatch: none of the detected groups is right — search/look up any
+     other group (full resolver, incl. members and online add). #}
+  <div x-data='resolveItem("{{ it.id }}", [], [], "", "")' style="margin-top:8px">
+    <button class="btn secondary small" x-show="!showOther" @click="showOther = true">
+      None of these &mdash; pick a different group&hellip;</button>
+    <div x-show="showOther" style="display:none; margin-top:8px">
+      {{ resolver_body(it) }}
+    </div>
   </div>
 </div>
 {% endmacro %}
