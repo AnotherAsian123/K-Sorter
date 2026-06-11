@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_icons.html" as ic %}
 {% block content %}
 <script>
 window.KS_NAMING = {language: "{{ naming[0] }}", template: "{{ naming[1] }}"};
@@ -14,7 +15,7 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
 
 {# ---- primary flow: pick folders, sort ---- #}
 <section class="card" x-data="setup()">
-  <h2>What shall we sort?</h2>
+  <h2>{{ ic.folder() }} What shall we sort?</h2>
   <div class="row">
     <div>
       <label>Source folder (the messy one)</label>
@@ -66,13 +67,13 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
       <input type="hidden" name="source" :value="source">
       <input type="hidden" name="dest" :value="dest">
       <input type="hidden" name="mode" :value="mode">
-      <button class="btn lg" type="submit">&#9654; Start sorting</button>
+      <button class="btn lg" type="submit">{{ ic.play() }} Start sorting</button>
     </form>
     <form hx-post="/audit" hx-target="#status" hx-swap="innerHTML" hx-disabled-elt="find button"
           style="flex:0 1 auto; min-width:0"
           onsubmit="setTimeout(function(){var s=document.getElementById('status');if(s)s.scrollIntoView({behavior:'smooth',block:'start'});},150)">
       <input type="hidden" name="dest" :value="dest">
-      <button class="btn secondary" type="submit">&#128270; Check sorted folder</button>
+      <button class="btn secondary" type="submit">{{ ic.search() }} Check sorted folder</button>
     </form>
   </div>
   <p class="muted" style="margin:10px 0 0">
@@ -85,7 +86,7 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
 
 {# ---- database strip ---- #}
 <section class="card">
-  <h2>Database</h2>
+  <h2>{{ ic.database() }} Database</h2>
   <div class="stats">
     <div class="stat"><div class="n">{{ counts.groups }}</div><div class="l">Groups</div></div>
     <div class="stat"><div class="n">{{ counts.members }}</div><div class="l">Members</div></div>
@@ -99,8 +100,8 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
   </p>
   <div class="row" style="align-items:center">
     <div style="flex:0 1 auto; display:flex; gap:8px; flex-wrap:wrap">
-      <button class="btn teal small" onclick="updateDb(this)">&#8635; Update Database</button>
-      <a class="btn secondary small" href="/manage" style="text-decoration:none">&#9881; Manage database</a>
+      <button class="btn teal small" onclick="updateDb(this)">{{ ic.reload() }} Update Database</button>
+      <a class="btn secondary small" href="/manage" style="text-decoration:none">{{ ic.cog() }} Manage database</a>
     </div>
     <span id="db-msg" class="muted"></span>
   </div>
@@ -109,7 +110,7 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
 {# ---- move history ---- #}
 {% if batches %}
 <section class="card">
-  <h2>Move history &amp; undo</h2>
+  <h2>{{ ic.undo() }} Move history &amp; undo</h2>
   <p class="muted">Every batch is journaled. Expand to see exactly what moved where; undo puts it back.</p>
   {% for b in batches %}
   <details class="batch">
@@ -120,7 +121,7 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
       {% if b.nmembers %}<span class="muted">&middot; {{ b.nmembers }} member{{ '' if b.nmembers == 1 else 's' }}</span>{% endif %}
       <span class="muted batch-date">{{ b.at }}</span>
       {% if b.undone %}<span class="chip manual">{{ b.undone }} undone</span>{% endif %}
-      <button class="btn clay small batch-undo" onclick="event.preventDefault();event.stopPropagation();undoBatch('{{ b.batch_id }}', this)">&#8634; Undo</button>
+      <button class="btn clay small batch-undo" onclick="event.preventDefault();event.stopPropagation();undoBatch('{{ b.batch_id }}', this)">{{ ic.undo() }} Undo</button>
     </summary>
     <div class="batch-body" hx-get="/batch/{{ b.batch_id }}/moves"
          hx-trigger="toggle once from:closest details" hx-swap="innerHTML">

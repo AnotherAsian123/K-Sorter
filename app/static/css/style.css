@@ -26,6 +26,7 @@
   --radius-sm: 12px;
   --speed: .22s;
   color-scheme: light;
+  interpolate-size: allow-keywords;   /* lets height:auto animate (details) */
 }
 [data-theme="dark"] {
   --bg: radial-gradient(1100px 700px at 12% -8%, #3a3d2f 0%, #2d3025 50%, #24271c 100%);
@@ -88,10 +89,15 @@ header.top {
 .spacer { flex: 1; }
 nav.links { display: flex; gap: 4px; }
 nav.links a {
-  text-decoration: none; color: var(--text); font-size: .88rem; font-weight: 600;
+  position: relative; text-decoration: none; color: var(--text);
+  font-size: .88rem; font-weight: 600;
   padding: 7px 13px; border-radius: 999px; transition: background var(--speed);
 }
+nav.links a::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 4px;
+  height: 2px; border-radius: 2px; background: var(--sage);
+  transform: scaleX(0); transform-origin: left; transition: transform .25s ease; }
 nav.links a:hover { background: color-mix(in srgb, var(--teal) 30%, transparent); }
+nav.links a:hover::after { transform: scaleX(1); }
 .toggle {
   cursor: pointer; background: none; border: 1px solid var(--border); color: var(--text);
   border-radius: 999px; padding: 7px 12px; font-size: .85rem; line-height: 1;
@@ -160,9 +166,18 @@ details.options > summary:hover { background: color-mix(in srgb, var(--teal) 22%
 .btn.small { padding: 7px 13px; min-height: 36px; font-size: .82rem; }
 .btn.lg { padding: 13px 26px; font-size: 1rem; }
 
+/* ---------- icons ---------- */
+svg.ic { width: 1em; height: 1em; flex-shrink: 0; vertical-align: -0.12em;
+  transition: transform var(--speed) ease; }
+.btn:hover svg.ic { transform: scale(1.12) rotate(-4deg); }
+h2 svg.ic { color: var(--sage); font-size: 1.05em; }
+[data-theme="dark"] h2 svg.ic { color: var(--teal); }
+
 /* ---------- chips & tags ---------- */
 .chip { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: .7rem;
-  font-weight: 700; letter-spacing: .3px; text-transform: lowercase; }
+  font-weight: 700; letter-spacing: .3px; text-transform: lowercase;
+  transition: opacity .35s ease, scale .35s ease; }
+@starting-style { .chip { opacity: 0; scale: .7; } }
 .chip.auto    { background: color-mix(in srgb, var(--teal) 42%, transparent); color: var(--text); }
 .chip.confirm { background: color-mix(in srgb, var(--clay) 40%, transparent); color: var(--text); }
 .chip.manual  { background: color-mix(in srgb, var(--olive) 18%, transparent); color: var(--text); }
@@ -173,7 +188,9 @@ details.options > summary:hover { background: color-mix(in srgb, var(--teal) 22%
 /* ---------- stats ---------- */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(86px, 1fr)); gap: 10px; }
 .stat { text-align: center; padding: 10px 6px; border-radius: var(--radius-sm);
-  background: var(--surface-2); border: 1px solid var(--border); }
+  background: var(--surface-2); border: 1px solid var(--border);
+  transition: translate var(--speed) ease, box-shadow var(--speed) ease; }
+.stat:hover { translate: 0 -2px; box-shadow: var(--shadow-soft); }
 .stat .n { font-size: clamp(1.3rem, 1.1rem + 1vw, 1.7rem); font-weight: 700; color: var(--sage);
   font-variant-numeric: tabular-nums; }
 [data-theme="dark"] .stat .n { color: var(--teal); }
@@ -306,6 +323,33 @@ table.moves tr.undone td { opacity: .5; text-decoration: line-through; }
   0%, 100% { transform: translateY(0) rotate(-6deg); }
   50%      { transform: translateY(-22px) rotate(8deg); }
 }
+/* minimalist geometry: outlined rings + a soft rotating square */
+.ambient .ring { position: absolute; border-radius: 50%; opacity: .3;
+  border: 2px solid color-mix(in srgb, var(--sage) 55%, transparent); will-change: transform; }
+.ambient .r1 { width: 130px; height: 130px; top: 14%; left: 5%;
+  animation: drift2 44s ease-in-out infinite alternate; }
+.ambient .r2 { width: 64px; height: 64px; top: 68%; right: 5%;
+  border-color: color-mix(in srgb, var(--clay) 55%, transparent);
+  animation: drift1 36s ease-in-out infinite alternate-reverse; }
+.ambient .r3 { width: 26px; height: 26px; top: 38%; right: 16%;
+  border-color: color-mix(in srgb, var(--teal) 75%, transparent);
+  animation: floaty 18s ease-in-out infinite; }
+.ambient .sq { position: absolute; width: 56px; height: 56px; bottom: 16%; right: 22%;
+  border: 2px solid color-mix(in srgb, var(--teal) 50%, transparent);
+  border-radius: 14px; opacity: .28; animation: slow-spin 70s linear infinite; }
+@keyframes slow-spin { to { transform: rotate(360deg); } }
+.ambient .b4 { width: 260px; height: 260px; top: 30%; right: -90px;
+  background: radial-gradient(circle at 40% 40%, color-mix(in srgb, var(--cream) 70%, var(--teal)), transparent 70%);
+  opacity: .35; animation: drift2 58s ease-in-out infinite alternate-reverse; }
+[data-theme="dark"] .ambient .b4 {
+  background: radial-gradient(circle at 40% 40%, color-mix(in srgb, var(--teal) 35%, transparent), transparent 70%); }
+
+/* ---------- smooth <details> expansion (modern CSS, no JS) ---------- */
+details::details-content {
+  height: 0; overflow: clip;
+  transition: height .3s ease, content-visibility .3s allow-discrete;
+}
+details[open]::details-content { height: auto; }
 
 /* ---------- scroll-driven reveals (sohub-style, zero JS) ---------- */
 @supports (animation-timeline: view()) {

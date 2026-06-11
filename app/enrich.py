@@ -77,8 +77,10 @@ def search_group(name: str) -> list[dict]:
 
 
 def add_confirmed_group(name: str, name_ko: str | None = None,
-                        aliases: list[str] | None = None) -> str:
-    """Persist a user-confirmed group (source='user' so it survives reseeds)."""
+                        aliases: list[str] | None = None,
+                        fetch_members: bool = False) -> str:
+    """Persist a user-confirmed group (source='user' so it survives reseeds).
+    With fetch_members, the roster is pulled from the web straight away."""
     gid = "user-" + uuid.uuid4().hex[:8]
     db.execute(
         "INSERT INTO groups(id,name,name_ko,source,confirmed,is_active)"
@@ -90,6 +92,11 @@ def add_confirmed_group(name: str, name_ko: str | None = None,
                 " VALUES(?,?,?,?)", ("group", gid, normalize(raw), raw))
     reload_index()
     log.info("Added user-confirmed group %s (%s)", name, gid)
+    if fetch_members:
+        try:
+            fetch_group_members(gid)
+        except Exception:  # noqa: BLE001 — enrichment must never break the add
+            log.exception("Member fetch failed for new group %s", name)
     return gid
 
 
@@ -103,6 +110,83 @@ def _wiki_extract(title: str, intro_only: bool) -> str:
     page.raise_for_status()
     pages = page.json().get("query", {}).get("pages", {})
     return next(iter(pages.values()), {}).get("extract", "") or ""
+
+
+# A member line in a Wikipedia article's plain-text Members section, e.g.
+#   "Jiwoo (지우) – leader"  or  "Carmen (카르멘)"  or  "Stella"
+_MEMBER_LINE_RE = re.compile(
+    r"^([A-Za-z][A-Za-z .\-']{0,28}?)\s*(?:\(([가-힣·\s]{1,20})\))?(?:\s[–—-].*)?$")
+
+
+def parse_members_section(text: str) -> list[dict]:
+    """Extract members from a Wikipedia article's plain-text extract.
+    Returns [{name, name_ko, current}] — current=False inside a Former/Past
+    subsection. Conservative: only short, name-like lines are accepted."""
+    sec = re.search(r"==\s*Members\s*==\n(.*?)(?=\n==[^=]|\Z)", text, re.S)
+    if not sec:
+        return []
+    members, current = [], True
+    for line in sec.group(1).splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("==="):
+            current = not re.search(r"(former|past)", line, re.I)
+            continue
+        m = _MEMBER_LINE_RE.match(line)
+        if not m or len(line) > 60:
+            continue
+        name = m.group(1).strip()
+        if not name or len(name.split()) > 3:
+            continue
+        members.append({"name": name, "name_ko": (m.group(2) or "").strip() or None,
+                        "current": current})
+        if len(members) >= 20:   # sanity cap
+            break
+    return members
+
+
+def lookup_group_members(group_name: str) -> list[dict]:
+    """Best-effort: members of a group from its Wikipedia article."""
+    results = search_group(group_name)   # already ranked best-title-first
+    if not results:
+        return []
+    nq = normalize(group_name).replace(" ", "")
+    title = results[0]["title"]
+    if nq not in normalize(title).replace(" ", ""):
+        return []                        # top hit isn't the group's own page
+    try:
+        text = _wiki_extract(title, intro_only=False)
+    except (httpx.HTTPError, ValueError) as exc:
+        log.warning("Members lookup failed for %r: %s", group_name, exc)
+        return []
+    members = parse_members_section(text)
+    log.info("Members lookup %r (%s) -> %d member(s)", group_name, title, len(members))
+    return members
+
+
+def fetch_group_members(group_id: str) -> int:
+    """Pull missing members for a group from the web and add them. Returns the
+    number added. Existing members (by any alias) are left untouched."""
+    row = db.query_one("SELECT name FROM groups WHERE id = ?", (group_id,))
+    if not row:
+        return 0
+    found = lookup_group_members(row["name"])
+    if not found:
+        return 0
+    existing = {r["alias"] for r in db.query(
+        "SELECT a.alias FROM aliases a JOIN group_members gm ON gm.member_id = a.entity_id "
+        "WHERE gm.group_id = ? AND a.entity_type = 'member'", (group_id,))}
+    added = 0
+    for m in found:
+        if normalize(m["name"]) in existing or (
+                m["name_ko"] and normalize(m["name_ko"]) in existing):
+            continue
+        if add_member(group_id, m["name"], m["name_ko"], is_current=m["current"]):
+            added += 1
+    if added:
+        log.info("Auto-added %d member(s) to %s", added, row["name"])
+    return added
 
 
 def lookup_member_korean(member_name: str, group_name: str) -> str | None:

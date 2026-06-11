@@ -131,6 +131,16 @@ def refresh_seed(force_download: bool = False) -> dict:
 
     db.set_meta("last_seed_status", "ok")
     db.set_meta("last_seed_at", datetime.now().strftime("%Y-%m-%d %H:%M"))
+
+    # User-added groups aren't in the dataset — top up their rosters from the
+    # web so e.g. a group added with one member gains the rest automatically.
+    from . import enrich
+    for row in db.query("SELECT id, name FROM groups WHERE source = 'user'"):
+        try:
+            enrich.fetch_group_members(row["id"])
+        except Exception:  # noqa: BLE001 — enrichment must never break a seed
+            log.exception("Member top-up failed for user group %s", row["name"])
+
     counts = db.counts()
     log.info("Seed complete: %s", counts)
     return counts

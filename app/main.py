@@ -196,7 +196,8 @@ async def enrich_search(name: str = Form(...)):
 
 @app.post("/enrich/add")
 async def enrich_add(name: str = Form(...), name_ko: str = Form("")):
-    gid = await asyncio.to_thread(enrich.add_confirmed_group, name, name_ko or None)
+    gid = await asyncio.to_thread(enrich.add_confirmed_group, name, name_ko or None,
+                                  None, True)
     return JSONResponse({"ok": True, "group_id": gid})
 
 
@@ -263,7 +264,8 @@ async def db_group_add(request: Request, name: str = Form(...),
     if not name.strip():
         return _group_detail(request, None)
     aliases = [a.strip() for a in alias.split(",") if a.strip()]
-    gid = enrich.add_confirmed_group(name.strip(), name_ko.strip() or None, aliases)
+    gid = await asyncio.to_thread(enrich.add_confirmed_group, name.strip(),
+                                  name_ko.strip() or None, aliases, True)
     return _group_detail(request, gid, refresh=True)
 
 
