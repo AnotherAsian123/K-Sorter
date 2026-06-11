@@ -146,8 +146,77 @@ def parse_members_section(text: str) -> list[dict]:
     return members
 
 
+_WIKIDATA = "https://www.wikidata.org/w/api.php"
+
+
+def _clean_label(s: str) -> str:
+    """Strip Wikidata disambiguators: '승민 (2000년)' -> '승민'."""
+    return re.sub(r"\s*\([^)]*\)", "", s or "").strip()
+
+
+def _members_from_wikidata(title: str) -> list[dict]:
+    """Members via the group's Wikidata entity (P527 'has part'). This is the
+    reliable source for big groups whose member list lives in the infobox,
+    which plain-text article extracts strip (e.g. Stray Kids)."""
+    headers = {"User-Agent": _UA, "Api-User-Agent": _UA}
+    try:
+        r = httpx.get(_WIKI, params={
+            "action": "query", "prop": "pageprops", "ppprop": "wikibase_item",
+            "titles": title, "redirects": 1, "format": "json",
+        }, timeout=15, headers=headers)
+        r.raise_for_status()
+        page = next(iter(r.json().get("query", {}).get("pages", {}).values()), {})
+        qid = page.get("pageprops", {}).get("wikibase_item")
+        if not qid:
+            return []
+        r2 = httpx.get(_WIKIDATA, params={
+            "action": "wbgetentities", "ids": qid, "props": "claims", "format": "json",
+        }, timeout=15, headers=headers)
+        r2.raise_for_status()
+        claims = r2.json().get("entities", {}).get(qid, {}).get("claims", {}).get("P527", [])
+        mids: list[tuple[str, bool]] = []
+        for c in claims:
+            v = c.get("mainsnak", {}).get("datavalue", {}).get("value")
+            if isinstance(v, dict) and v.get("id"):
+                # An end-time qualifier (P582) marks a former member.
+                mids.append((v["id"], "P582" in c.get("qualifiers", {})))
+        if not mids:
+            return []
+        r3 = httpx.get(_WIKIDATA, params={
+            "action": "wbgetentities", "ids": "|".join(m for m, _ in mids[:50]),
+            "props": "labels|aliases", "languages": "en|ko", "format": "json",
+        }, timeout=15, headers=headers)
+        r3.raise_for_status()
+        entities = r3.json().get("entities", {})
+    except (httpx.HTTPError, ValueError) as exc:
+        log.warning("Wikidata members lookup failed for %r: %s", title, exc)
+        return []
+
+    out = []
+    for mid, former in mids:
+        e = entities.get(mid, {})
+        labels = e.get("labels", {})
+        en = _clean_label(labels.get("en", {}).get("value", ""))
+        ko = _clean_label(labels.get("ko", {}).get("value", ""))
+        name = en or ko
+        if not name:
+            continue
+        name_ko = ko if (ko and re.search(r"[가-힣]", ko) and ko != name) else None
+        aliases = []
+        for lang_aliases in e.get("aliases", {}).values():
+            for a in lang_aliases:
+                for part in a.get("value", "").split("|"):
+                    part = _clean_label(part)
+                    if part and part not in (name, name_ko) and part not in aliases:
+                        aliases.append(part)
+        out.append({"name": name, "name_ko": name_ko, "current": not former,
+                    "aliases": aliases[:6]})
+    return out
+
+
 def lookup_group_members(group_name: str) -> list[dict]:
-    """Best-effort: members of a group from its Wikipedia article."""
+    """Best-effort: members of a group — structured Wikidata first, then the
+    Wikipedia article's Members section as a fallback for smaller groups."""
     results = search_group(group_name)   # already ranked best-title-first
     if not results:
         return []
@@ -155,12 +224,13 @@ def lookup_group_members(group_name: str) -> list[dict]:
     title = results[0]["title"]
     if nq not in normalize(title).replace(" ", ""):
         return []                        # top hit isn't the group's own page
-    try:
-        text = _wiki_extract(title, intro_only=False)
-    except (httpx.HTTPError, ValueError) as exc:
-        log.warning("Members lookup failed for %r: %s", group_name, exc)
-        return []
-    members = parse_members_section(text)
+    members = _members_from_wikidata(title)
+    if not members:
+        try:
+            members = parse_members_section(_wiki_extract(title, intro_only=False))
+        except (httpx.HTTPError, ValueError) as exc:
+            log.warning("Members lookup failed for %r: %s", group_name, exc)
+            return []
     log.info("Members lookup %r (%s) -> %d member(s)", group_name, title, len(members))
     return members
 
@@ -182,9 +252,15 @@ def fetch_group_members(group_id: str) -> int:
         if normalize(m["name"]) in existing or (
                 m["name_ko"] and normalize(m["name_ko"]) in existing):
             continue
-        if add_member(group_id, m["name"], m["name_ko"], is_current=m["current"]):
+        mid = add_member(group_id, m["name"], m["name_ko"], is_current=m["current"])
+        if mid:
             added += 1
+            for al in m.get("aliases", []):
+                db.execute(
+                    "INSERT OR IGNORE INTO aliases(entity_type,entity_id,alias,alias_raw)"
+                    " VALUES('member',?,?,?)", (mid, normalize(al), al))
     if added:
+        reload_index()
         log.info("Auto-added %d member(s) to %s", added, row["name"])
     return added
 

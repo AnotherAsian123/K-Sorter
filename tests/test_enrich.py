@@ -40,3 +40,11 @@ def test_parse_current_former_subsections():
 
 def test_no_members_section():
     assert parse_members_section("== History ==\nJust prose.") == []
+
+
+def test_clean_label_strips_disambiguators():
+    from app.enrich import _clean_label
+    assert _clean_label("승민 (2000년)") == "승민"
+    assert _clean_label("아이엔 (가수)") == "아이엔"
+    assert _clean_label("Hyunjin") == "Hyunjin"
+    assert _clean_label("") == ""
