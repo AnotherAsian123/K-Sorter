@@ -29,13 +29,23 @@ async function swapStatus(url, data) {
   const r = await postForm(url, data);
   const el = document.getElementById("status");
   const html = await r.text();
-  // Morph keeps existing DOM nodes, so updates glide instead of flashing.
-  if (window.Idiomorph) {
-    Idiomorph.morph(el, html, { morphStyle: "innerHTML" });
+  // Morph keeps existing DOM nodes (no flash); a view transition makes the
+  // resolved block fade out while the rest of the stack glides up.
+  const apply = () => {
+    if (window.Idiomorph) {
+      Idiomorph.morph(el, html, { morphStyle: "innerHTML" });
+    } else {
+      el.innerHTML = html;
+    }
+    if (window.htmx) window.htmx.process(el);
+  };
+  const reduceMotion = window.matchMedia &&
+    matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (document.startViewTransition && !reduceMotion) {
+    document.startViewTransition(apply);
   } else {
-    el.innerHTML = html;
+    apply();
   }
-  if (window.htmx) window.htmx.process(el);
 }
 
 async function updateDb(btn) {

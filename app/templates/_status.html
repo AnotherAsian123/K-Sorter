@@ -6,7 +6,11 @@
 {# One resolver used by BOTH queues: candidate quick-picks + free search + online
    lookup, so the correct group is always reachable even if it isn't suggested. #}
 {% macro resolver(it) %}
-<div class="item" x-data='resolveItem("{{ it.id }}", {{ it.group_candidates|tojson }}, {{ it.member_candidates|tojson }}, "{{ it.group_id or "" }}", {{ (it.suggested_member or "")|tojson }})'>
+{# Stable id: idiomorph matches by id, so resolving one item never morphs a
+   neighbour's markup onto this node (which wiped Alpine-rendered text). The
+   view-transition-name lets the remaining items glide up smoothly. #}
+<div class="item" id="item-{{ it.id }}" style="view-transition-name: vt-{{ it.id }}"
+     x-data='resolveItem("{{ it.id }}", {{ it.group_candidates|tojson }}, {{ it.member_candidates|tojson }}, "{{ it.group_id or "" }}", {{ (it.suggested_member or "")|tojson }})'>
   <div class="fname">{{ it.filename }}</div>
   {% if it.current_location %}<div class="meta">Currently filed under: <strong>{{ it.current_location }}</strong></div>{% endif %}
   <div class="why">{{ it.help or it.reason }}</div>
@@ -31,8 +35,12 @@
   </div>
   <div class="controls actions">
     <button class="btn small" @click="confirm()" :disabled="!groupId">&#10003; Confirm</button>
-    <button class="btn teal small" @click="lookup()" :disabled="lookupBusy"
-            x-text="lookupBusy ? '⏳ Searching…' : '🔍 Look up online'"></button>
+    {# Labels live in the server HTML (not x-text) so a morph can never wipe
+       them — Alpine only toggles which one is visible. #}
+    <button class="btn teal small" @click="lookup()" :disabled="lookupBusy">
+      <span x-show="!lookupBusy">&#128270; Look up online</span>
+      <span x-show="lookupBusy" style="display:none">&#8987; Searching&hellip;</span>
+    </button>
     <button class="btn secondary small" @click="skip()">Skip</button>
   </div>
   <div class="online-box" x-show="online.length" style="margin-top:10px">
@@ -42,7 +50,10 @@
         <span x-show="o._loading || o._none" x-text="o.title" class="muted"></span>
         <a x-show="!o._loading && !o._none" :href="o.url" target="_blank" x-text="o.title"></a>
         <button class="btn small" x-show="!o._loading && !o._none" @click="addOnline(o)"
-                :disabled="addBusy" x-text="addBusy ? 'Adding…' : '+ Add as new group'"></button>
+                :disabled="addBusy">
+          <span x-show="!addBusy">+ Add as new group</span>
+          <span x-show="addBusy" style="display:none">Adding&hellip;</span>
+        </button>
       </div>
     </template>
   </div>
@@ -52,7 +63,7 @@
 {# Multi-group (collab) decision: replicate everywhere, Special Stages only, or
    just one group. #}
 {% macro collab_resolver(it) %}
-<div class="item">
+<div class="item" id="item-{{ it.id }}" style="view-transition-name: vt-{{ it.id }}">
   <div class="fname">{{ it.filename }}</div>
   {% if it.current_location %}<div class="meta">Currently filed under: <strong>{{ it.current_location }}</strong></div>{% endif %}
   <div class="why">{{ it.help }}</div>
@@ -60,21 +71,21 @@
     {% for g in it.collab_groups %}<strong>{{ g.name }}</strong>{% if not loop.last %} + {% endif %}{% endfor %}
   </div>
   <div class="controls" style="margin-top:8px">
-    <button class="btn small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML"
+    <button class="btn small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML transition:true"
             hx-vals='{"item_id": "{{ it.id }}", "action": "replicate"}'>
       &#10003; Special Stages + all groups</button>
-    <button class="btn teal small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML"
+    <button class="btn teal small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML transition:true"
             hx-vals='{"item_id": "{{ it.id }}", "action": "groups"}'>
       All groups (copy to each)</button>
-    <button class="btn secondary small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML"
+    <button class="btn secondary small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML transition:true"
             hx-vals='{"item_id": "{{ it.id }}", "action": "special"}'>
       Special Stages only</button>
     {% for g in it.collab_groups %}
-    <button class="btn teal small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML"
+    <button class="btn teal small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML transition:true"
             hx-vals='{"item_id": "{{ it.id }}", "action": "group:{{ g.id }}"}'>
       Only {{ g.name }}</button>
     {% endfor %}
-    <button class="btn secondary small" hx-post="/skip" hx-target="#status" hx-swap="morph:innerHTML"
+    <button class="btn secondary small" hx-post="/skip" hx-target="#status" hx-swap="morph:innerHTML transition:true"
             hx-vals='{"item_id": "{{ it.id }}"}'>Skip</button>
   </div>
 </div>

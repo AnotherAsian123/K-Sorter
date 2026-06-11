@@ -42,6 +42,9 @@
 
 /* ---------- motion ---------- */
 @view-transition { navigation: auto; }   /* cross-fade page navigations */
+/* Resolving a queue item: the block fades away and the stack glides up. */
+::view-transition-group(*) { animation-duration: .32s; animation-timing-function: ease; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .2s; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
   ::view-transition-group(*) { animation: none !important; }
