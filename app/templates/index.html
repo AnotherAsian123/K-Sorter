@@ -61,14 +61,14 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
   </details>
 
   <div class="row" style="margin-top:18px; align-items:center">
-    <form hx-post="/sort" hx-target="#status" hx-swap="innerHTML" hx-disabled-elt="find button"
+    <form hx-post="/sort" hx-target="#status" hx-swap="morph:innerHTML" hx-disabled-elt="find button"
           style="flex:0 1 auto; min-width:0">
       <input type="hidden" name="source" :value="source">
       <input type="hidden" name="dest" :value="dest">
       <input type="hidden" name="mode" :value="mode">
       <button class="btn lg" type="submit">&#9654; Start sorting</button>
     </form>
-    <form hx-post="/audit" hx-target="#status" hx-swap="innerHTML" hx-disabled-elt="find button"
+    <form hx-post="/audit" hx-target="#status" hx-swap="morph:innerHTML" hx-disabled-elt="find button"
           style="flex:0 1 auto; min-width:0"
           onsubmit="setTimeout(function(){var s=document.getElementById('status');if(s)s.scrollIntoView({behavior:'smooth',block:'start'});},150)">
       <input type="hidden" name="dest" :value="dest">
@@ -111,6 +111,7 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
 <section class="card">
   <h2>Move history &amp; undo</h2>
   <p class="muted">Every batch is journaled. Expand to see exactly what moved where; undo puts it back.</p>
+  <div class="history-scroll">
   {% for b in batches %}
   <details class="batch">
     <summary class="batch-sum">
@@ -128,6 +129,7 @@ window.KS_DEFAULTS = {source: "{{ settings.source_default }}", dest: "{{ setting
     </div>
   </details>
   {% endfor %}
+  </div>
 </section>
 {% endif %}
 

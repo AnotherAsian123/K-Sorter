@@ -28,7 +28,13 @@ async function postForm(url, data) {
 async function swapStatus(url, data) {
   const r = await postForm(url, data);
   const el = document.getElementById("status");
-  el.innerHTML = await r.text();
+  const html = await r.text();
+  // Morph keeps existing DOM nodes, so updates glide instead of flashing.
+  if (window.Idiomorph) {
+    Idiomorph.morph(el, html, { morphStyle: "innerHTML" });
+  } else {
+    el.innerHTML = html;
+  }
   if (window.htmx) window.htmx.process(el);
 }
 

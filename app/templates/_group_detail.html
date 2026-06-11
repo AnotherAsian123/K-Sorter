@@ -15,7 +15,11 @@
 
   <div class="meta" style="margin-top:10px">
     Aliases / nicknames:
-    {% for a in data.aliases %}<span class="tag">{{ a }}</span> {% endfor %}
+    {% for a in data.aliases %}<span class="tag">{{ a.raw }}{% if not a.protected %}<button
+      class="tag-x" type="button" title="Delete this alias"
+      hx-post="/db/group/{{ g.id }}/alias/remove" hx-vals='{"key": {{ a.key|tojson }}}'
+      hx-target="#group-detail" hx-swap="innerHTML"
+      hx-confirm="Delete alias “{{ a.raw }}”?">&times;</button>{% endif %}</span> {% endfor %}
     {% if not data.aliases %}<span class="muted">none</span>{% endif %}
   </div>
   <form hx-post="/db/group/{{ g.id }}/alias" hx-target="#group-detail" hx-swap="innerHTML" class="controls" style="margin-top:6px">

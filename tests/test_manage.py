@@ -38,6 +38,20 @@ def test_alias_then_match():
     assert matcher.get_index().match("GG comeback").group.id == "g"
 
 
+def test_remove_alias():
+    manage.add_group_alias("g", "Wrongy")
+    assert matcher.get_index().match("Wrongy stage").group.id == "g"
+    data = manage.get_group("g")
+    bad = next(a for a in data["aliases"] if a["raw"] == "Wrongy")
+    assert not bad["protected"]
+    manage.remove_group_alias("g", bad["key"])
+    assert matcher.get_index().match("Wrongy stage").group is None
+    # The group's own (current) name is protected from deletion in the UI.
+    cur = manage.get_group("g")["group"]["name"]
+    assert any(a["protected"] and a["raw"] == cur
+               for a in manage.get_group("g")["aliases"])
+
+
 def test_delete_group():
     gid = enrich.add_confirmed_group("Temp Group", None, ["TG"])
     assert manage.get_group(gid) is not None

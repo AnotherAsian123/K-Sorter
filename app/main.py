@@ -282,6 +282,12 @@ async def db_group_alias(request: Request, gid: str, alias: str = Form(...)):
     return _group_detail(request, gid)
 
 
+@app.post("/db/group/{gid}/alias/remove", response_class=HTMLResponse)
+async def db_group_alias_remove(request: Request, gid: str, key: str = Form(...)):
+    manage.remove_group_alias(gid, key)
+    return _group_detail(request, gid)
+
+
 @app.post("/db/group/{gid}/active", response_class=HTMLResponse)
 async def db_group_active(request: Request, gid: str, active: str = Form("1")):
     manage.set_group_active(gid, active == "1")

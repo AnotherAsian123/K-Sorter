@@ -1,6 +1,6 @@
 {# Re-poll only while the job is running, so review forms stay stable when done. #}
 {% if running %}
-<div hx-get="/status" hx-trigger="every 1s" hx-target="#status" hx-swap="innerHTML"></div>
+<div hx-get="/status" hx-trigger="every 1s" hx-target="#status" hx-swap="morph:innerHTML"></div>
 {% endif %}
 
 {# One resolver used by BOTH queues: candidate quick-picks + free search + online
@@ -56,21 +56,21 @@
     {% for g in it.collab_groups %}<strong>{{ g.name }}</strong>{% if not loop.last %} + {% endif %}{% endfor %}
   </div>
   <div class="controls" style="margin-top:8px">
-    <button class="btn small" hx-post="/resolve-collab" hx-target="#status" hx-swap="innerHTML"
+    <button class="btn small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML"
             hx-vals='{"item_id": "{{ it.id }}", "action": "replicate"}'>
       &#10003; Special Stages + all groups</button>
-    <button class="btn teal small" hx-post="/resolve-collab" hx-target="#status" hx-swap="innerHTML"
+    <button class="btn teal small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML"
             hx-vals='{"item_id": "{{ it.id }}", "action": "groups"}'>
       All groups (copy to each)</button>
-    <button class="btn secondary small" hx-post="/resolve-collab" hx-target="#status" hx-swap="innerHTML"
+    <button class="btn secondary small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML"
             hx-vals='{"item_id": "{{ it.id }}", "action": "special"}'>
       Special Stages only</button>
     {% for g in it.collab_groups %}
-    <button class="btn teal small" hx-post="/resolve-collab" hx-target="#status" hx-swap="innerHTML"
+    <button class="btn teal small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML"
             hx-vals='{"item_id": "{{ it.id }}", "action": "group:{{ g.id }}"}'>
       Only {{ g.name }}</button>
     {% endfor %}
-    <button class="btn secondary small" hx-post="/skip" hx-target="#status" hx-swap="innerHTML"
+    <button class="btn secondary small" hx-post="/skip" hx-target="#status" hx-swap="morph:innerHTML"
             hx-vals='{"item_id": "{{ it.id }}"}'>Skip</button>
   </div>
 </div>

@@ -9,12 +9,13 @@
   <link rel="icon" type="image/png" href="/static/img/favicon.png">
   <link rel="stylesheet" href="/static/css/style.css">
   <script src="/static/js/htmx.min.js" defer></script>
+  <script src="/static/js/idiomorph-ext.min.js" defer></script>
   <!-- app.js must load BEFORE alpine: it registers Alpine.data() via the
        alpine:init event, which Alpine fires the instant its script runs. -->
   <script src="/static/js/app.js" defer></script>
   <script src="/static/js/alpine.min.js" defer></script>
 </head>
-<body>
+<body hx-ext="morph">
   <div class="ambient" aria-hidden="true">
     <span class="blob b1"></span>
     <span class="blob b2"></span>

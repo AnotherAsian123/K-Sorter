@@ -111,11 +111,17 @@ def get_group(gid: str) -> dict | None:
         "SELECT m.id, m.stage_name, m.stage_name_ko, gm.is_current "
         "FROM group_members gm JOIN members m ON m.id = gm.member_id "
         "WHERE gm.group_id = ? ORDER BY gm.is_current DESC, m.stage_name", (gid,))
-    aliases = db.query(
-        "SELECT alias_raw FROM aliases WHERE entity_type='group' AND entity_id=? "
-        "ORDER BY alias_raw", (gid,))
+    # The group's current names are protected: deleting them would break
+    # matching for the very name shown on the folder.
+    protected = {normalize(g["name"] or ""), normalize(g["name_ko"] or "")} - {""}
+    aliases = [
+        {"raw": a["alias_raw"], "key": a["alias"], "protected": a["alias"] in protected}
+        for a in db.query(
+            "SELECT alias, alias_raw FROM aliases WHERE entity_type='group' "
+            "AND entity_id=? ORDER BY alias_raw", (gid,))
+    ]
     return {"group": dict(g), "members": [dict(m) for m in members],
-            "aliases": [a["alias_raw"] for a in aliases]}
+            "aliases": aliases}
 
 
 # ---- group edits ----------------------------------------------------------
@@ -138,6 +144,17 @@ def rename_group(gid: str, name: str, name_ko: str | None) -> None:
 def add_group_alias(gid: str, alias: str) -> None:
     _add_alias("group", gid, alias)
     reload_index()
+
+
+def remove_group_alias(gid: str, alias_key: str) -> None:
+    """Delete one alias (by normalized key) — and any learned correction that
+    created it, so it doesn't come back via the corrections table."""
+    db.execute("DELETE FROM aliases WHERE entity_type='group' AND entity_id=? AND alias=?",
+               (gid, alias_key))
+    db.execute("DELETE FROM corrections WHERE entity_type='group' AND entity_id=? AND pattern=?",
+               (gid, alias_key))
+    reload_index()
+    log.info("Removed alias %r from group %s", alias_key, gid)
 
 
 def set_group_active(gid: str, active: bool) -> None:
