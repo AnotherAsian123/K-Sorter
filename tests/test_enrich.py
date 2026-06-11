@@ -85,6 +85,37 @@ def test_fetch_dedupes_and_syncs_status(monkeypatch):
     assert len(rows) == 5                    # no duplicates created
 
 
+WIKITEXT = (
+    "...intro...<ref>x</ref>\n\n==Members==\n"
+    '{| class="wikitable"\n!Name\n!Position(s)\n|-\n'
+    "|[[Ko Woo Ri|Woori]] (우리)\n|{{N/A|TBA}}\n|-\n"
+    "|[[Cho Hyun Young|Hyunyoung]] (현영)\n|Maknae\n|}\n\n"
+    "==Discography==\n* ''[[Festival (RAINBOW18)|Festival]]'' (2025)\n"
+)
+
+WIKITEXT_LIST = (
+    "==Members==\n===Current===\n*[[Alpha]] (알파) – leader\n*[[Beta]] (베타)\n"
+    "===Former===\n*[[Gamma]] (감마)\n\n==History==\nProse here.\n"
+)
+
+
+def test_parse_members_wikitext_table():
+    from app.enrich import parse_members_wikitext
+    members = parse_members_wikitext(WIKITEXT)
+    assert [(m["name"], m["name_ko"]) for m in members] == [
+        ("Woori", "우리"), ("Hyunyoung", "현영")]
+    assert all(m["current"] for m in members)
+
+
+def test_parse_members_wikitext_list_with_former():
+    from app.enrich import parse_members_wikitext
+    members = parse_members_wikitext(WIKITEXT_LIST)
+    by = {m["name"]: m for m in members}
+    assert by["Alpha"]["current"] is True and by["Alpha"]["name_ko"] == "알파"
+    assert by["Gamma"]["current"] is False
+    assert len(members) == 3   # the Festival/History lines never parse as members
+
+
 def test_clean_label_strips_disambiguators():
     from app.enrich import _clean_label
     assert _clean_label("승민 (2000년)") == "승민"

@@ -25,27 +25,76 @@ async function postForm(url, data) {
   });
 }
 
+// FLIP (First-Last-Invert-Play): batch-read positions, mutate once, then play
+// compositor-only transform animations via the Web Animations API. Unlike a
+// View Transition this never screenshots the page (no whole-page flicker, no
+// jank from snapshotting frosted-glass cards) — it's just GPU transforms.
+function _reduceMotion() {
+  return window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function _captureRects() {
+  const map = new Map();
+  document.querySelectorAll("#status .item[id]").forEach((el) =>
+    map.set(el.id, el.getBoundingClientRect()));
+  return map;
+}
+
+function _flipFrom(prev) {
+  if (_reduceMotion()) return;
+  document.querySelectorAll("#status .item[id]").forEach((el) => {
+    const a = prev.get(el.id);
+    if (!a) return;
+    const b = el.getBoundingClientRect();
+    const dx = a.left - b.left, dy = a.top - b.top;
+    if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+    el.animate(
+      [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
+      { duration: 550, easing: "cubic-bezier(.22, .61, .2, 1)" }
+    );
+  });
+}
+
 async function swapStatus(url, data) {
-  const r = await postForm(url, data);
   const el = document.getElementById("status");
-  const html = await r.text();
-  // Morph keeps existing DOM nodes (no flash); a view transition makes the
-  // resolved block fade out while the rest of the stack glides up.
-  const apply = () => {
-    if (window.Idiomorph) {
-      Idiomorph.morph(el, html, { morphStyle: "innerHTML" });
-    } else {
-      el.innerHTML = html;
-    }
-    if (window.htmx) window.htmx.process(el);
-  };
-  const reduceMotion = window.matchMedia &&
-    matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (document.startViewTransition && !reduceMotion) {
-    document.startViewTransition(apply);
-  } else {
-    apply();
+  const leaving = data && data.item_id
+    ? document.getElementById("item-" + data.item_id) : null;
+  const fetching = postForm(url, data);
+  // Fade the resolved block out softly while the request is in flight.
+  if (leaving && !_reduceMotion()) {
+    try {
+      await leaving.animate(
+        [{ opacity: 1, transform: "none" },
+         { opacity: 0, transform: "translateY(-8px) scale(.985)" }],
+        { duration: 220, easing: "ease-out", fill: "forwards" }
+      ).finished;
+    } catch (e) {}
   }
+  const r = await fetching;
+  const html = await r.text();
+  const prev = _captureRects();           // First
+  if (window.Idiomorph) {                 // mutate once
+    Idiomorph.morph(el, html, { morphStyle: "innerHTML" });
+  } else {
+    el.innerHTML = html;
+  }
+  if (window.htmx) window.htmx.process(el);
+  // If the item survived (e.g. the resolve failed), undo the leave-fade.
+  if (leaving && data.item_id) {
+    const back = document.getElementById("item-" + data.item_id);
+    if (back) back.getAnimations().forEach((an) => an.cancel());
+  }
+  _flipFrom(prev);                        // Invert + Play
+}
+
+// Collab actions route through swapStatus so they get the same fade + glide.
+async function resolveCollab(itemId, action, btn) {
+  if (btn) btn.disabled = true;
+  await swapStatus("/resolve-collab", { item_id: itemId, action: action });
+}
+async function skipItem(itemId, btn) {
+  if (btn) btn.disabled = true;
+  await swapStatus("/skip", { item_id: itemId });
 }
 
 async function updateDb(btn) {

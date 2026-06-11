@@ -56,9 +56,9 @@
    lookup, so the correct group is always reachable even if it isn't suggested. #}
 {% macro resolver(it) %}
 {# Stable id: idiomorph matches by id, so resolving one item never morphs a
-   neighbour's markup onto this node (which wiped Alpine-rendered text). The
-   view-transition-name lets the remaining items glide up smoothly. #}
-<div class="item" id="item-{{ it.id }}" style="view-transition-name: vt-{{ it.id }}"
+   neighbour's markup onto this node (which wiped Alpine-rendered text), and
+   the FLIP glide in app.js tracks items across the swap by this id. #}
+<div class="item" id="item-{{ it.id }}"
      x-data='resolveItem("{{ it.id }}", {{ it.group_candidates|tojson }}, {{ it.member_candidates|tojson }}, "{{ it.group_id or "" }}", {{ (it.suggested_member or "")|tojson }})'>
   <div class="fname">{{ it.filename }}</div>
   {% if it.current_location %}<div class="meta">Currently filed under: <strong>{{ it.current_location }}</strong></div>{% endif %}
@@ -71,30 +71,27 @@
 {# Multi-group (collab) decision: replicate everywhere, Special Stages only, or
    just one group. #}
 {% macro collab_resolver(it) %}
-<div class="item" id="item-{{ it.id }}" style="view-transition-name: vt-{{ it.id }}">
+<div class="item" id="item-{{ it.id }}">
   <div class="fname">{{ it.filename }}</div>
   {% if it.current_location %}<div class="meta">Currently filed under: <strong>{{ it.current_location }}</strong></div>{% endif %}
   <div class="why">{{ it.help }}</div>
   <div class="meta">Detected groups:
     {% for g in it.collab_groups %}<strong>{{ g.name }}</strong>{% if not loop.last %} + {% endif %}{% endfor %}
   </div>
+  {# These route through swapStatus (JS) so they share the same soft fade-out
+     and FLIP glide as the standard resolver. #}
   <div class="controls" style="margin-top:8px">
-    <button class="btn small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML transition:true"
-            hx-vals='{"item_id": "{{ it.id }}", "action": "replicate"}'>
+    <button class="btn small" onclick="resolveCollab('{{ it.id }}', 'replicate', this)">
       &#10003; Special Stages + all groups</button>
-    <button class="btn teal small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML transition:true"
-            hx-vals='{"item_id": "{{ it.id }}", "action": "groups"}'>
+    <button class="btn teal small" onclick="resolveCollab('{{ it.id }}', 'groups', this)">
       All groups (copy to each)</button>
-    <button class="btn secondary small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML transition:true"
-            hx-vals='{"item_id": "{{ it.id }}", "action": "special"}'>
+    <button class="btn secondary small" onclick="resolveCollab('{{ it.id }}', 'special', this)">
       Special Stages only</button>
     {% for g in it.collab_groups %}
-    <button class="btn teal small" hx-post="/resolve-collab" hx-target="#status" hx-swap="morph:innerHTML transition:true"
-            hx-vals='{"item_id": "{{ it.id }}", "action": "group:{{ g.id }}"}'>
+    <button class="btn teal small" onclick="resolveCollab('{{ it.id }}', 'group:{{ g.id }}', this)">
       Only {{ g.name }}</button>
     {% endfor %}
-    <button class="btn secondary small" hx-post="/skip" hx-target="#status" hx-swap="morph:innerHTML transition:true"
-            hx-vals='{"item_id": "{{ it.id }}"}'>Skip</button>
+    <button class="btn secondary small" onclick="skipItem('{{ it.id }}', this)">Skip</button>
   </div>
   {# Escape hatch: none of the detected groups is right — search/look up any
      other group (full resolver, incl. members and online add). #}

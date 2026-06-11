@@ -69,7 +69,8 @@ def search_group(name: str) -> list[dict]:
                 "url": f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
             }
     # No name-matching Wikipedia hit? Wikidata covers entities without their
-    # own article (sub-units, very new groups) — offer those too.
+    # own article, and the K-pop Wiki (Fandom) covers sub-units and brand-new
+    # acts neither has (e.g. RAINBOW18) — offer those too.
     if not any(c["score"] >= 3 for c in seen.values()):
         for e in _search_wikidata_entities(name):
             title = e["label"]
@@ -78,6 +79,15 @@ def search_group(name: str) -> list[dict]:
             seen[title] = {
                 "title": title, "snippet": e["description"], "score": 2,
                 "url": f"https://www.wikidata.org/wiki/{e['id']}",
+            }
+        for title in _fandom_search(name):
+            if title in seen:
+                continue
+            tnorm = normalize(title).replace(" ", "")
+            seen[title] = {
+                "title": title, "snippet": "K-pop Wiki (Fandom)",
+                "score": 3 if (nq and nq in tnorm) else 1,
+                "url": f"https://kpop.fandom.com/wiki/{title.replace(' ', '_')}",
             }
     out = sorted(seen.values(), key=lambda c: -c["score"])[:5]
     for c in out:
@@ -158,6 +168,67 @@ def parse_members_section(text: str) -> list[dict]:
 
 
 _WIKIDATA = "https://www.wikidata.org/w/api.php"
+# The K-pop Wiki (Fandom) runs MediaWiki too — it covers sub-units and brand
+# new acts that Wikipedia/Wikidata miss (e.g. RAINBOW18).
+_FANDOM = "https://kpop.fandom.com/api.php"
+
+
+def _fandom_search(name: str, limit: int = 5) -> list[str]:
+    try:
+        r = httpx.get(_FANDOM, params={
+            "action": "query", "list": "search", "srsearch": name,
+            "srlimit": limit, "format": "json",
+        }, timeout=15, headers={"User-Agent": _UA})
+        r.raise_for_status()
+        return [x["title"] for x in r.json().get("query", {}).get("search", [])]
+    except (httpx.HTTPError, ValueError) as exc:
+        log.warning("Fandom search failed for %r: %s", name, exc)
+        return []
+
+
+def _fandom_wikitext(title: str) -> str:
+    try:
+        r = httpx.get(_FANDOM, params={
+            "action": "parse", "page": title, "prop": "wikitext", "format": "json",
+        }, timeout=15, headers={"User-Agent": _UA})
+        r.raise_for_status()
+        return r.json().get("parse", {}).get("wikitext", {}).get("*", "") or ""
+    except (httpx.HTTPError, ValueError) as exc:
+        log.warning("Fandom wikitext fetch failed for %r: %s", title, exc)
+        return ""
+
+
+# A member entry in wikitext: a table row "|[[Ko Woo Ri|Woori]] (우리)" or a
+# bullet "*[[Name]] (한글) – position".
+_WT_MEMBER_RE = re.compile(
+    r"^[|*]\s*\[\[(?:[^\]|]*\|)?([^\]|]+)\]\]\s*(?:\(([가-힣·\s]{1,20})\))?")
+
+
+def parse_members_wikitext(wikitext: str) -> list[dict]:
+    """Members from a MediaWiki article's raw wikitext (Fandom pages keep the
+    roster in a Members table/list)."""
+    sec = re.search(r"==+\s*Members\s*==+\n(.*?)(?=\n==[^=]|\Z)", wikitext, re.S)
+    if not sec:
+        return []
+    members, current, seen = [], True, set()
+    for line in sec.group(1).splitlines():
+        line = line.strip()
+        if line.startswith("==="):
+            current = not re.search(r"(former|past)", line, re.I)
+            continue
+        m = _WT_MEMBER_RE.match(line)
+        if not m:
+            continue
+        name = _clean_label(m.group(1))
+        if not name or len(name) > 30 or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        members.append({"name": name,
+                        "name_ko": (m.group(2) or "").strip() or None,
+                        "current": current, "aliases": []})
+        if len(members) >= 30:
+            break
+    return members
 
 
 def _clean_label(s: str) -> str:
@@ -284,6 +355,16 @@ def lookup_group_members(group_name: str) -> list[dict]:
                 log.info("Members lookup %r (wikidata %s) -> %d member(s)",
                          group_name, e["id"], len(members))
                 return members
+    # Last stop: the K-pop Wiki (Fandom) — its pages keep rosters in a
+    # Members table we can read from the raw wikitext.
+    for title in _fandom_search(group_name, limit=3):
+        if nq not in normalize(title).replace(" ", ""):
+            continue
+        members = parse_members_wikitext(_fandom_wikitext(title))
+        if members:
+            log.info("Members lookup %r (fandom %s) -> %d member(s)",
+                     group_name, title, len(members))
+            return members
     return []
 
 
