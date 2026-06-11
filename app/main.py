@@ -300,6 +300,12 @@ async def db_group_delete(request: Request, gid: str):
     return _group_detail(request, None, refresh=True)
 
 
+@app.post("/db/group/{gid}/fetch-members", response_class=HTMLResponse)
+async def db_group_fetch_members(request: Request, gid: str):
+    await asyncio.to_thread(enrich.fetch_group_members, gid)
+    return _group_detail(request, gid, refresh=True)
+
+
 @app.post("/db/group/{gid}/member/add", response_class=HTMLResponse)
 async def db_member_add(request: Request, gid: str, name: str = Form(...),
                         name_ko: str = Form("")):

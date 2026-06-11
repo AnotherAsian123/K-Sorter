@@ -11,6 +11,7 @@ kpopnet.json schema (relevant fields):
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime
 
 import httpx
@@ -53,7 +54,7 @@ def _add_alias(rows: list, entity_type: str, entity_id: str, raw: str | None) ->
             rows.append((entity_type, entity_id, norm, alias_raw))
 
 
-def refresh_seed(force_download: bool = False) -> dict:
+def refresh_seed(force_download: bool = False, sync_rosters: bool = True) -> dict:
     """(Re)build the database from the dataset. Returns row counts.
 
     User-confirmed rows (source='user') are preserved — we only replace
@@ -132,14 +133,24 @@ def refresh_seed(force_download: bool = False) -> dict:
     db.set_meta("last_seed_status", "ok")
     db.set_meta("last_seed_at", datetime.now().strftime("%Y-%m-%d %H:%M"))
 
-    # User-added groups aren't in the dataset — top up their rosters from the
-    # web so e.g. a group added with one member gains the rest automatically.
-    from . import enrich
-    for row in db.query("SELECT id, name FROM groups WHERE source = 'user'"):
-        try:
-            enrich.fetch_group_members(row["id"])
-        except Exception:  # noqa: BLE001 — enrichment must never break a seed
-            log.exception("Member top-up failed for user group %s", row["name"])
+    # Sync every group's roster from the web: the dataset is a snapshot, so it
+    # misses new members and rebuilt line-ups (e.g. tripleS growing to 24, or
+    # FIFTY FIFTY's 2024 relaunch). Adds missing members and updates the
+    # current/former flags; never removes anyone. Runs in the background
+    # thread that called us, throttled to stay polite.
+    if sync_rosters:
+        from . import enrich
+        rows = db.query("SELECT id, name FROM groups ORDER BY name")
+        log.info("Roster sync: checking %d group(s) against the web…", len(rows))
+        for i, row in enumerate(rows, 1):
+            try:
+                enrich.fetch_group_members(row["id"])
+            except Exception:  # noqa: BLE001 — enrichment must never break a seed
+                log.exception("Roster sync failed for group %s", row["name"])
+            time.sleep(0.1)
+            if i % 25 == 0:
+                log.info("Roster sync: %d/%d groups checked", i, len(rows))
+        log.info("Roster sync complete.")
 
     counts = db.counts()
     log.info("Seed complete: %s", counts)

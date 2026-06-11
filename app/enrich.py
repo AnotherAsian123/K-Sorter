@@ -216,41 +216,89 @@ def _members_from_wikidata(title: str) -> list[dict]:
 
 def lookup_group_members(group_name: str) -> list[dict]:
     """Best-effort: members of a group — structured Wikidata first, then the
-    Wikipedia article's Members section as a fallback for smaller groups."""
+    Wikipedia article's Members section as a fallback for smaller groups.
+
+    Tries each name-matching search result until one yields members: the top
+    hit can be a namesake (e.g. 'Fifty-Fifty', the coin-toss article) while the
+    real page is 'Fifty Fifty (group)'."""
     results = search_group(group_name)   # already ranked best-title-first
-    if not results:
-        return []
     nq = normalize(group_name).replace(" ", "")
-    title = results[0]["title"]
-    if nq not in normalize(title).replace(" ", ""):
-        return []                        # top hit isn't the group's own page
-    members = _members_from_wikidata(title)
-    if not members:
-        try:
-            members = parse_members_section(_wiki_extract(title, intro_only=False))
-        except (httpx.HTTPError, ValueError) as exc:
-            log.warning("Members lookup failed for %r: %s", group_name, exc)
-            return []
-    log.info("Members lookup %r (%s) -> %d member(s)", group_name, title, len(members))
-    return members
+    for cand in results[:4]:
+        title = cand["title"]
+        if nq not in normalize(title).replace(" ", ""):
+            continue                     # not the group's own page
+        members = _members_from_wikidata(title)
+        if not members:
+            try:
+                members = parse_members_section(_wiki_extract(title, intro_only=False))
+            except (httpx.HTTPError, ValueError) as exc:
+                log.warning("Members lookup failed for %r (%s): %s", group_name, title, exc)
+                members = []
+        if members:
+            log.info("Members lookup %r (%s) -> %d member(s)",
+                     group_name, title, len(members))
+            return members
+    return []
 
 
 def fetch_group_members(group_id: str) -> int:
-    """Pull missing members for a group from the web and add them. Returns the
-    number added. Existing members (by any alias) are left untouched."""
+    """Sync a group's roster from the web: add missing members and update the
+    current/former flag of existing ones (line-up changes). Returns the number
+    of members added. Never removes anyone."""
     row = db.query_one("SELECT name FROM groups WHERE id = ?", (group_id,))
     if not row:
         return 0
     found = lookup_group_members(row["name"])
     if not found:
         return 0
-    existing = {r["alias"] for r in db.query(
-        "SELECT a.alias FROM aliases a JOIN group_members gm ON gm.member_id = a.entity_id "
-        "WHERE gm.group_id = ? AND a.entity_type = 'member'", (group_id,))}
-    added = 0
+
+    # Existing members by alias, plus compact forms so 'Lee Chae-young',
+    # 'Lee Chaeyoung' and 'Chaeyoung' dedupe to the same person.
+    alias_to_mid: dict[str, str] = {}
+    for r in db.query(
+            "SELECT a.alias, a.entity_id FROM aliases a "
+            "JOIN group_members gm ON gm.member_id = a.entity_id "
+            "WHERE gm.group_id = ? AND a.entity_type = 'member'", (group_id,)):
+        alias_to_mid[r["alias"]] = r["entity_id"]
+    compact_to_mid = {a.replace(" ", ""): m for a, m in alias_to_mid.items()}
+
+    def _existing(m: dict) -> str | None:
+        for cand in (m["name"], m.get("name_ko")):
+            if not cand:
+                continue
+            key = normalize(cand)
+            if key in alias_to_mid:
+                return alias_to_mid[key]
+            compact = key.replace(" ", "")
+            if compact in compact_to_mid:
+                return compact_to_mid[compact]
+            if len(compact) >= 4:
+                for ec, mid in compact_to_mid.items():
+                    if len(ec) >= 4 and (compact in ec or ec in compact):
+                        return mid
+        return None
+
+    current_before = [r["member_id"] for r in db.query(
+        "SELECT member_id FROM group_members WHERE group_id=? AND is_current=1",
+        (group_id,))]
+
+    added = changed = 0
+    matched: set[str] = set()
     for m in found:
-        if normalize(m["name"]) in existing or (
-                m["name_ko"] and normalize(m["name_ko"]) in existing):
+        mid = _existing(m)
+        if mid:
+            matched.add(mid)
+            # Keep the membership status in step with the web (rebuilt
+            # line-ups: e.g. FIFTY FIFTY's original members became former).
+            cur = db.query_one(
+                "SELECT is_current FROM group_members WHERE group_id=? AND member_id=?",
+                (group_id, mid))
+            want = 1 if m["current"] else 0
+            if cur and cur["is_current"] != want:
+                db.execute(
+                    "UPDATE group_members SET is_current=? WHERE group_id=? AND member_id=?",
+                    (want, group_id, mid))
+                changed += 1
             continue
         mid = add_member(group_id, m["name"], m["name_ko"], is_current=m["current"])
         if mid:
@@ -259,9 +307,22 @@ def fetch_group_members(group_id: str) -> int:
                 db.execute(
                     "INSERT OR IGNORE INTO aliases(entity_type,entity_id,alias,alias_raw)"
                     " VALUES('member',?,?,?)", (mid, normalize(al), al))
-    if added:
+
+    # Wikidata often lists ONLY the current line-up (e.g. FIFTY FIFTY after its
+    # relaunch). When the web roster is plausibly complete, members we have as
+    # current who aren't in it have left — mark them former (never removed).
+    if len(found) >= len(current_before):
+        for mid in current_before:
+            if mid not in matched:
+                db.execute(
+                    "UPDATE group_members SET is_current=0 WHERE group_id=? AND member_id=?",
+                    (group_id, mid))
+                changed += 1
+
+    if added or changed:
         reload_index()
-        log.info("Auto-added %d member(s) to %s", added, row["name"])
+        log.info("Roster sync for %s: %d added, %d status change(s)",
+                 row["name"], added, changed)
     return added
 
 
