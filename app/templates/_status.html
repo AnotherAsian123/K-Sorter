@@ -11,7 +11,7 @@
   {% if it.current_location %}<div class="meta">Currently filed under: <strong>{{ it.current_location }}</strong></div>{% endif %}
   <div class="why">{{ it.help or it.reason }}</div>
   {% if it.confidence %}<div class="meta">best guess confidence {{ it.confidence }}%</div>{% endif %}
-  <div class="controls">
+  <div class="controls fields">
     <select x-model="groupId" title="Group">
       <option value="">&mdash; pick group &mdash;</option>
       <template x-for="g in groups" :key="g.id"><option :value="g.id" :selected="g.id === groupId" x-text="g.name + (g.name_ko ? ' ('+g.name_ko+')' : '') + (g.score ? ' · '+g.score+'%' : '')"></option></template>
@@ -22,10 +22,14 @@
       <option value="">&mdash; group folder (no member) &mdash;</option>
       <template x-for="m in members" :key="m.id"><option :value="m.id" :selected="m.id === memberId" x-text="m.name + (m.name_ko ? ' ('+m.name_ko+')' : '') + (m.current === false ? ' (former)' : '')"></option></template>
     </select>
-    <input type="text" placeholder="+ add member&hellip;" x-model="newMember" x-show="groupId"
-           @keydown.enter.prevent="addMember()" style="max-width:150px"
-           title="Member missing? Add them to this group.">
-    <button class="btn teal small" @click="addMember()" x-show="groupId" :disabled="!newMember.trim()">+ Member</button>
+    <div class="addmem" x-show="groupId">
+      <input type="text" placeholder="+ add member&hellip;" x-model="newMember"
+             @keydown.enter.prevent="addMember()"
+             title="Member missing? Add them to this group.">
+      <button class="btn teal small" @click="addMember()" :disabled="!newMember.trim()">+ Member</button>
+    </div>
+  </div>
+  <div class="controls actions">
     <button class="btn small" @click="confirm()" :disabled="!groupId">&#10003; Confirm</button>
     <button class="btn teal small" @click="lookup()" :disabled="lookupBusy"
             x-text="lookupBusy ? '⏳ Searching…' : '🔍 Look up online'"></button>
@@ -113,8 +117,10 @@
     <span class="job-pct">{{ state.percent }}%</span>
   </h2>
 
-  {# Determinate bar once we know the total; gentle indeterminate while scanning. #}
-  <div class="progress {{ 'indeterminate' if running and state.total == 0 else '' }}">
+  {# Pulsing while running; a solid bar once finished (green done / red error). #}
+  <div class="progress
+    {%- if running %} running{% if state.total == 0 %} indeterminate{% endif %}
+    {%- elif state.status == 'error' %} err{% else %} done{% endif %}">
     <span style="width: {{ state.percent }}%"></span>
   </div>
 

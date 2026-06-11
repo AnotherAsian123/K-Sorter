@@ -193,9 +193,14 @@ details.options > summary:hover { background: color-mix(in srgb, var(--teal) 22%
   background: color-mix(in srgb, var(--olive) 12%, transparent); }
 .progress > span { display: block; height: 100%;
   background: linear-gradient(90deg, var(--teal), var(--sage));
-  background-size: 200% 100%; animation: flow 2s linear infinite;
-  transition: width .5s ease; border-radius: 999px; }
+  background-size: 200% 100%;
+  transition: width .5s ease, background-color .4s ease; border-radius: 999px; }
 @keyframes flow { from { background-position: 0 0; } to { background-position: 200% 0; } }
+/* Pulse only while the job is in progress. */
+.progress.running > span { animation: flow 2s linear infinite; }
+/* Finished: a calm solid bar — green when done, red on error. */
+.progress.done > span { background: var(--sage); animation: none; }
+.progress.err  > span { background: var(--danger); animation: none; }
 .progress.indeterminate > span { width: 35% !important;
   animation: flow 2s linear infinite, sweep 1.6s ease-in-out infinite; }
 @keyframes sweep { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
@@ -226,6 +231,7 @@ details.options > summary:hover { background: color-mix(in srgb, var(--teal) 22%
   border-left: 3px solid var(--clay); }
 .item .meta { font-size: .8rem; color: var(--muted); margin: 4px 0 10px; }
 .item .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.item .controls + .controls { margin-top: 8px; }
 /* min-width: 0 keeps option/text length from driving layout — widths stay
    flex-determined, so changing dropdown contents can't cause a jump. Long
    option text is ellipsized inside the stable box instead. */
@@ -233,6 +239,14 @@ details.options > summary:hover { background: color-mix(in srgb, var(--teal) 22%
   flex: 1 1 170px; width: auto; min-width: 0; max-width: 100%;
   text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
   transition: border-color var(--speed), box-shadow var(--speed);
+}
+/* The "+ add member" input keeps its own button glued beside it. */
+.item .controls .addmem { display: flex; gap: 8px; flex: 1 1 230px; min-width: 0; align-items: center; }
+.item .controls .addmem input[type=text] { flex: 1 1 auto; }
+/* Action buttons share the row evenly and NEVER compact (text stays whole). */
+.item .controls .btn { white-space: nowrap; }
+.item .controls.actions .btn {
+  flex: 1 1 auto; min-width: max-content; max-width: 240px; justify-content: center;
 }
 .online-box { border: 1px dashed var(--border); border-radius: var(--radius-sm);
   padding: 8px 12px; background: color-mix(in srgb, var(--teal) 10%, transparent); }
